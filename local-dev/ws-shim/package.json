@@ -1,0 +1,17 @@
+{
+  "name": "ws-shim",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local stand-in for API Gateway WebSocket ($connect/$disconnect/postToConnection). Dev-only.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
