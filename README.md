@@ -6,8 +6,6 @@ media sharing, and search — designed KISS-first: **7 services**, one
 datastore technology (DynamoDB), no service boundary that doesn't earn
 its keep.
 
-Full architecture and design rationale: [`chat-app-design-doc.md`](./chat-app-design-doc.md)
-Guidance for AI-assisted development in this repo: [`CLAUDE.md`](./CLAUDE.md)
 
 ---
 
