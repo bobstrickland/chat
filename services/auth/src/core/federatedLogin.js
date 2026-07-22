@@ -1,10 +1,10 @@
 const SUPPORTED_PROVIDERS = ["google", "apple"];
 
 /**
- * @param {import('../providers/IdentityProvider.js').IdentityProvider} identityProvider
+ * @param {{ identityProvider: import('../providers/IdentityProvider.js').IdentityProvider }} deps
  * @param {{ provider: string, code: string, redirectUri: string }} input
  */
-export async function federatedLogin(identityProvider, input) {
+export async function federatedLogin({ identityProvider }, input) {
   if (!SUPPORTED_PROVIDERS.includes(input.provider)) {
     throw new Error(`unsupported provider: ${input.provider}`);
   }

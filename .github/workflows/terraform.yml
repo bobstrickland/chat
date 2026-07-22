@@ -2,11 +2,11 @@ name: terraform-dev
 
 on:
   pull_request:
-    branches: [main]
+    branches: [master]
     paths:
       - "terraform/**"
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - "terraform/**"
 

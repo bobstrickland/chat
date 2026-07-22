@@ -1,8 +1,8 @@
 /**
- * @param {import('../providers/IdentityProvider.js').IdentityProvider} identityProvider
+ * @param {{ identityProvider: import('../providers/IdentityProvider.js').IdentityProvider }} deps
  * @param {{ accessToken?: string, code: string, mfaSession?: string, email?: string }} input
  */
-export async function verifyMfa(identityProvider, input) {
+export async function verifyMfa({ identityProvider }, input) {
   if (!input.code) {
     throw new Error("code is required");
   }

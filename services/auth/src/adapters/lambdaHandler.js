@@ -1,4 +1,4 @@
-import { getIdentityProvider } from "../config.js";
+import { getDependencies } from "../config.js";
 import { register } from "../core/register.js";
 import { login } from "../core/login.js";
 import { refreshToken } from "../core/refreshToken.js";
@@ -10,7 +10,7 @@ import { verifyToken } from "../core/verifyToken.js";
 // Per CLAUDE.md: no reliance on Lambda execution-context reuse for
 // correctness. This module-level instance is a warm-start perf bonus only —
 // every call path below still works correctly on a cold start.
-let identityProvider;
+let deps;
 
 const ROUTES = {
   "POST /auth/register": register,
@@ -28,7 +28,7 @@ const ROUTES = {
  * wraps the result — no business logic lives here.
  */
 export const handler = async (event) => {
-  identityProvider ??= getIdentityProvider();
+  deps ??= getDependencies();
 
   if (event.requestContext?.http?.path === "/health") {
     return { statusCode: 200, body: JSON.stringify({ status: "ok" }) };
@@ -43,7 +43,7 @@ export const handler = async (event) => {
 
   try {
     const body = event.body ? JSON.parse(event.body) : {};
-    const result = await coreFn(identityProvider, body);
+    const result = await coreFn(deps, body);
     return { statusCode: 200, body: JSON.stringify(result) };
   } catch (err) {
     return { statusCode: 400, body: JSON.stringify({ error: err.message }) };
