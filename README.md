@@ -6,17 +6,6 @@ media sharing, and search — designed KISS-first: **7 services**, one
 datastore technology (DynamoDB), no service boundary that doesn't earn
 its keep.
 
-
----
-
-## Status
-
-**Early build-out, local-first.** Currently standing up services against
-a local Docker stack before deploying real AWS infrastructure. See
-[`CLAUDE.md` → Current Status](./CLAUDE.md#current-status) for exactly
-what's built and what's next — that section is kept up to date as the
-single source of truth on build progress, this README is not.
-
 ---
 
 ## Architecture at a Glance
