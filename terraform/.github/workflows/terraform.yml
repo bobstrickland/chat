@@ -1,0 +1,69 @@
+name: terraform-dev
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "terraform/**"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.GH_ACTIONS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Trigger CodeBuild (terraform plan)
+        run: |
+          aws codebuild start-build \
+            --project-name ${{ secrets.CODEBUILD_PROJECT_NAME }} \
+            --environment-variables-override name=TF_ACTION,value=plan,type=PLAINTEXT \
+            --query 'build.id' --output text > build-id.txt
+          echo "BUILD_ID=$(cat build-id.txt)" >> $GITHUB_ENV
+
+      - name: Wait for CodeBuild result
+        run: |
+          aws codebuild batch-get-builds --ids "$BUILD_ID" \
+            --query 'builds[0].buildStatus' --output text
+          # NOTE: replace with a polling loop or the aws-actions/aws-codebuild-run-build action
+          # for production use — this is a minimal placeholder.
+
+  apply:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.GH_ACTIONS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Trigger CodeBuild (terraform apply)
+        run: |
+          aws codebuild start-build \
+            --project-name ${{ secrets.CODEBUILD_PROJECT_NAME }} \
+            --environment-variables-override name=TF_ACTION,value=apply,type=PLAINTEXT \
+            --query 'build.id' --output text > build-id.txt
+          echo "BUILD_ID=$(cat build-id.txt)" >> $GITHUB_ENV
+
+      - name: Wait for CodeBuild result
+        run: |
+          aws codebuild batch-get-builds --ids "$BUILD_ID" \
+            --query 'builds[0].buildStatus' --output text

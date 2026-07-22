@@ -1,0 +1,146 @@
+services:
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: dynamodb-local
+    user: root   # bypasses the non-root permission issue on the mounted volume
+    ports:
+      - "8000:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "./data"]
+    volumes:
+      - ./DATA/dynamodb-data:/home/dynamodblocal/data
+    working_dir: /home/dynamodblocal
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=localhost:8082
+    ports:
+      - "9092:9092"
+      - "8082:8082"
+    volumes:
+      - ./DATA/redpanda-data:/var/lib/redpanda/data
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    container_name: redpanda-console
+    depends_on:
+      - redpanda
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports:
+      - "8081:8080"
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: localminio
+      MINIO_ROOT_PASSWORD: localminio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./DATA/minio-data:/data
+
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - ./DATA/opensearch-data:/usr/share/opensearch/data
+
+  localstack:
+    image: localstack/localstack:4.4.0
+    container_name: localstack
+    environment:
+      SERVICES: s3,secretsmanager,kms
+      DEBUG: 0
+      # DEPRECATED and unused DEFAULT_REGION: us-east-1
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./DATA/localstack-data:/var/lib/localstack
+
+  ws-shim:
+    build:
+      context: ./local-dev/ws-shim
+    container_name: ws-shim
+    ports:
+      - "8090:8090"
+    environment:
+      - PORT=8090
+
+  # ---- application services ----
+  # Uncomment as each service is scaffolded. Each points src/adapters/httpServer.js
+  # at the container ports above via env vars in local-env/.env
+
+  auth-service:
+    build: ./services/auth
+    env_file: .env
+    ports: ["3001:3000"]
+    depends_on: [dynamodb-local, localstack]
+
+  # profile-service:
+  #   build: ./services/profile
+  #   env_file: .env
+  #   ports: ["3002:3000"]
+  #   depends_on: [dynamodb-local]
+
+  # messaging-service:
+  #   build: ./services/messaging-conversations
+  #   env_file: .env
+  #   ports: ["3003:3000"]
+  #   depends_on: [dynamodb-local, redpanda]
+
+  # presence-service:
+  #   build: ./services/presence-connection
+  #   env_file: .env
+  #   ports: ["3004:3000"]
+  #   depends_on: [dynamodb-local, redpanda]
+
+  # notification-service:
+  #   build: ./services/notification
+  #   env_file: .env
+  #   ports: ["3005:3000"]
+  #   depends_on: [dynamodb-local, redpanda]
+
+  # media-service:
+  #   build: ./services/media
+  #   env_file: .env
+  #   ports: ["3006:3000"]
+  #   depends_on: [dynamodb-local, minio]
+
+  # search-service:
+  #   build: ./services/search
+  #   env_file: .env
+  #   ports: ["3007:3000"]
+  #   depends_on: [dynamodb-local, redpanda, opensearch]
+
+volumes:
+  dynamodb-data:
+    driver: local
+  redpanda-data:
+    driver: local
+  minio-data:
+    driver: local
+  opensearch-data:
+    driver: local
+  localstack-data:
+    driver: local

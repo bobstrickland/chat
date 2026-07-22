@@ -1,0 +1,65 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>personal.bob</groupId>
+  <artifactId>claudeagent</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  
+  
+    <properties>
+        <java.version>21</java.version>
+        <spring-boot.version>3.4.2</spring-boot.version>
+        <spring-dotenv.version>5.1.0</spring-dotenv.version>
+        <bouncycastle.version>1.78.1</bouncycastle.version>
+        <spring-ai.version>1.0.0-M6</spring-ai.version>
+        <awssdk.version>2.26.25</awssdk.version>
+        <owasp-sanitizer.version>20240325.1</owasp-sanitizer.version>
+        <lombok.version>1.18.46</lombok.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+    </properties>
+ 
+    <dependencies>
+    
+    
+        <dependency>
+            <groupId>me.paulschwarz</groupId>
+            <artifactId>springboot3-dotenv</artifactId> 
+            <version>${spring-dotenv.version}</version>
+        </dependency>
+        
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+            <version>${lombok.version}</version>
+        </dependency>
+    
+    
+    </dependencies>
+ 
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>${java.version}</release>
+                    <!-- JDK 23+ no longer runs annotation processors found implicitly on the
+                         classpath, so Lombok must be declared as an explicit processor path. -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+ 
+ </project>

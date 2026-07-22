@@ -1,0 +1,31 @@
+version: 0.2
+
+env:
+  variables:
+    TF_ACTION: "plan"
+
+phases:
+  install:
+    commands:
+      - curl -o terraform.zip https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip
+      - unzip terraform.zip -d /usr/local/bin
+      - terraform -version
+
+  pre_build:
+    commands:
+      - cd terraform/environments/dev
+      - terraform init -input=false
+
+  build:
+    commands:
+      - |
+        if [ "$TF_ACTION" = "apply" ]; then
+          terraform apply -auto-approve -input=false -var-file=dev.tfvars
+        else
+          terraform plan -input=false -var-file=dev.tfvars
+        fi
+
+artifacts:
+  files:
+    - "**/*"
+  base-directory: "terraform/environments/dev"
