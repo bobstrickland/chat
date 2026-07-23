@@ -22,6 +22,12 @@ class DeliveryServiceTest {
     return new ConversationRepository() {
       public void ensureDirectConversation(String c, String a, String b) {}
 
+      public void createGroup(String c, String name, String createdBy, List<String> members) {}
+
+      public ConversationMeta meta(String c) {
+        return null;
+      }
+
       public void saveMessage(Message m) {}
 
       public List<Message> listMessages(String c, int limit) {
@@ -38,6 +44,12 @@ class DeliveryServiceTest {
 
       public Message lastMessage(String c) {
         return null;
+      }
+
+      public void upsertReceipt(String c, String kind, String userId, String position) {}
+
+      public List<Receipt> receipts(String c) {
+        return List.of();
       }
     };
   }
@@ -65,9 +77,9 @@ class DeliveryServiceTest {
   private static final NotificationTrigger NO_NOTIFY = (r, m) -> {};
 
   @Test
-  void deliversToEveryRecipientConnectionButNotTheSender() {
+  void deliversToRecipientsAndTheSendersOtherDevices() {
     var repo = repoWithMembers("c1", List.of("alice", "bob"));
-    // bob is on two devices; alice (the sender) also happens to have a connection.
+    // bob is on two devices; alice (the sender) also has another tab open.
     ConnectionLookup lookup =
         userId ->
             switch (userId) {
@@ -81,8 +93,11 @@ class DeliveryServiceTest {
     delivery.deliver(msg("c1", "alice", "hello"));
 
     List<String> targets = pusher.pushes.stream().map(Push::connectionId).toList();
-    assertEquals(List.of("bob-web", "bob-phone"), targets, "both of bob's devices, not alice's");
-    assertTrue(pusher.pushes.stream().allMatch(p -> p.frame().equals("FRAME:hello")));
+    // Phase 7 multi-device: the sender's OWN connections are pushed too (the
+    // originating tab dedups by messageId; other tabs display it).
+    assertTrue(targets.contains("alice-web"), "sender's other device gets the echo");
+    assertTrue(targets.containsAll(List.of("bob-web", "bob-phone")), "all of bob's devices");
+    assertEquals(3, targets.size());
   }
 
   @Test
@@ -124,7 +139,7 @@ class DeliveryServiceTest {
   }
 
   @Test
-  void groupFanOutHitsAllMembersExceptSender() {
+  void groupFanOutHitsAllMembersIncludingSendersOwnDevices() {
     var repo = repoWithMembers("g1", List.of("alice", "bob", "carol"));
     var counts = new java.util.HashMap<String, AtomicInteger>();
     ConnectionLookup lookup = userId -> List.of(userId + "-conn");
@@ -135,8 +150,19 @@ class DeliveryServiceTest {
         };
     new DeliveryService(repo, lookup, pusher, NO_NOTIFY, m -> m.body()).deliver(msg("g1", "alice", "hey all"));
 
-    assertFalse(counts.containsKey("alice-conn"), "sender excluded");
+    assertEquals(1, counts.get("alice-conn").get(), "sender's other devices included (multi-device)");
     assertEquals(1, counts.get("bob-conn").get());
     assertEquals(1, counts.get("carol-conn").get());
+  }
+
+  @Test
+  void offlineSenderIsNotNotifiedOfTheirOwnMessage() {
+    var repo = repoWithMembers("c1", List.of("alice", "bob"));
+    // Both offline. Only bob (a recipient) should get a notification, never alice.
+    ConnectionLookup none = userId -> List.of();
+    var notifier = new RecordingNotifier();
+    new DeliveryService(repo, none, new RecordingPusher(), notifier, m -> m.body())
+        .deliver(msg("c1", "alice", "hi"));
+    assertEquals(List.of("bob"), notifier.offline, "sender not notified of own message");
   }
 }

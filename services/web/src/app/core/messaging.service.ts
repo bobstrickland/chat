@@ -13,16 +13,25 @@ export interface ChatMessage {
   mine: boolean;
 }
 
+export type MessageStatus = 'sent' | 'delivered' | 'read' | null;
+
+interface Receipt {
+  userId: string;
+  kind: 'delivered' | 'read';
+  position: string;
+}
+
 interface HistoryResponse {
   conversationId: string;
   messages: Omit<ChatMessage, 'mine'>[];
+  receipts: Receipt[];
 }
 
 /**
- * Drives the single-conversation chat view. History comes over HTTP; new
- * messages from the other side arrive over the shared WebSocket
- * (RealtimeService) as `message` frames. Own sent messages are appended
- * locally (the server excludes the sender from delivery in Phase 4).
+ * Drives the ONE open conversation (direct or group), keyed by conversationId.
+ * Also tracks the PEER's read/delivered positions so it can render ticks on my
+ * messages (direct conversations only — per-member ticks for groups are out of
+ * scope), and auto-sends a read receipt while I'm viewing.
  */
 @Injectable({ providedIn: 'root' })
 export class MessagingService {
@@ -32,58 +41,105 @@ export class MessagingService {
 
   readonly messages = signal<ChatMessage[]>([]);
   readonly conversationId = signal<string | null>(null);
-  private peerId: string | null = null;
+
+  // The other participant's furthest read/delivered position (ISO sentAt).
+  private readonly peerRead = signal<string | null>(null);
+  private readonly peerDelivered = signal<string | null>(null);
 
   constructor() {
-    // One long-lived subscription: append any delivered message that belongs to
-    // the conversation currently open.
     this.realtime.on('message').subscribe((frame) => {
       if (frame['conversationId'] !== this.conversationId()) return;
-      this.append({
+      const mine = this.append({
         messageId: String(frame['messageId']),
         conversationId: String(frame['conversationId']),
         senderId: String(frame['senderId']),
         body: String(frame['body']),
         sentAt: String(frame['sentAt']),
       });
+      // A new message I can see is a message I've read.
+      if (!mine) this.markViewedRead();
+    });
+
+    this.realtime.on('receipt').subscribe((frame) => {
+      if (frame['conversationId'] !== this.conversationId()) return;
+      if (String(frame['userId']) === this.tokenStore.userId) return; // my own receipt
+      this.applyPeerReceipt(String(frame['kind']), String(frame['position']));
     });
   }
 
-  /** Load history for the direct conversation with `peerId` and make it current. */
-  async open(peerId: string): Promise<void> {
-    this.peerId = peerId;
-    this.messages.set([]);
-    this.conversationId.set(null);
-    const res = await firstValueFrom(
-      this.http.get<HistoryResponse>(`/conversations/direct/${encodeURIComponent(peerId)}/messages`),
-    );
-    this.conversationId.set(res.conversationId);
-    this.messages.set(res.messages.map((m) => this.decorate(m)));
+  directIdWith(peerId: string): string {
+    const me = this.tokenStore.userId ?? '';
+    const [lo, hi] = me <= peerId ? [me, peerId] : [peerId, me];
+    return `dm#${lo}#${hi}`;
   }
 
-  /** @returns the persisted message (so callers can update the conversation list). */
-  async send(body: string): Promise<(Omit<ChatMessage, 'mine'>) | null> {
-    if (!this.peerId || !body.trim()) return null;
-    const sent = await firstValueFrom(
-      this.http.post<Omit<ChatMessage, 'mine'>>('/messages', {
-        recipientId: this.peerId,
-        body: body.trim(),
-      }),
+  async open(conversationId: string): Promise<void> {
+    this.messages.set([]);
+    this.peerRead.set(null);
+    this.peerDelivered.set(null);
+    this.conversationId.set(conversationId);
+
+    const res = await firstValueFrom(
+      this.http.get<HistoryResponse>(`/conversations/${encodeURIComponent(conversationId)}/messages`),
     );
-    // Append our own message locally — delivery skips the sender.
+    if (this.conversationId() !== conversationId) return; // switched away mid-load
+    this.messages.set(res.messages.map((m) => this.decorate(m)));
+    for (const r of res.receipts ?? []) {
+      if (r.userId !== this.tokenStore.userId) this.applyPeerReceipt(r.kind, r.position);
+    }
+    this.markViewedRead();
+  }
+
+  async send(body: string): Promise<(Omit<ChatMessage, 'mine'>) | null> {
+    const conversationId = this.conversationId();
+    if (!conversationId || !body.trim()) return null;
+    const sent = await firstValueFrom(
+      this.http.post<Omit<ChatMessage, 'mine'>>(
+        `/conversations/${encodeURIComponent(conversationId)}/messages`,
+        { body: body.trim() },
+      ),
+    );
     this.append(sent);
     return sent;
   }
 
-  /** The peer of the currently-open conversation, if any. */
-  currentPeerId(): string | null {
-    return this.peerId;
+  /** Read/delivered/sent status for one of MY messages (direct convos only). */
+  statusOf(m: ChatMessage): MessageStatus {
+    if (!m.mine) return null;
+    const id = this.conversationId();
+    if (!id || id.startsWith('grp#')) return null; // no per-message ticks for groups
+    const read = this.peerRead();
+    if (read && read >= m.sentAt) return 'read';
+    const delivered = this.peerDelivered();
+    if (delivered && delivered >= m.sentAt) return 'delivered';
+    return 'sent';
   }
 
-  private append(m: Omit<ChatMessage, 'mine'>): void {
-    // Guard against double-append (e.g. a future echo) by messageId.
-    if (this.messages().some((x) => x.messageId === m.messageId)) return;
-    this.messages.update((list) => [...list, this.decorate(m)]);
+  /** @returns true if the appended message was my own. */
+  private append(m: Omit<ChatMessage, 'mine'>): boolean {
+    const decorated = this.decorate(m);
+    if (this.messages().some((x) => x.messageId === m.messageId)) return decorated.mine;
+    this.messages.update((list) => [...list, decorated]);
+    return decorated.mine;
+  }
+
+  /** Advance a peer position forward-only. */
+  private applyPeerReceipt(kind: string, position: string): void {
+    const target = kind === 'read' ? this.peerRead : kind === 'delivered' ? this.peerDelivered : null;
+    if (!target) return;
+    const prev = target();
+    if (!prev || position > prev) target.set(position);
+  }
+
+  /** Tell the server I've read up to the latest message (fire-and-forget). */
+  private markViewedRead(): void {
+    const id = this.conversationId();
+    const list = this.messages();
+    if (!id || list.length === 0) return;
+    const latest = list[list.length - 1].sentAt;
+    this.http
+      .post(`/conversations/${encodeURIComponent(id)}/receipts`, { kind: 'read', position: latest })
+      .subscribe({ error: () => {} });
   }
 
   private decorate(m: Omit<ChatMessage, 'mine'>): ChatMessage {

@@ -16,6 +16,12 @@ public interface ConversationRepository {
    */
   void ensureDirectConversation(String conversationId, String userA, String userB);
 
+  /** Create a group conversation: meta (with name) + a member item per member. */
+  void createGroup(String conversationId, String name, String createdBy, java.util.List<String> members);
+
+  /** Conversation meta (type + name), or null if the conversation doesn't exist. */
+  ConversationMeta meta(String conversationId);
+
   void saveMessage(Message message);
 
   /** Messages in chronological order (oldest first), newest-capped at limit. */
@@ -29,4 +35,13 @@ public interface ConversationRepository {
 
   /** The most recent message in a conversation, or null if there are none yet. */
   Message lastMessage(String conversationId);
+
+  /**
+   * Advance a user's receipt position. Only moves forward — a late/duplicate
+   * receipt for an older position must not roll it back.
+   */
+  void upsertReceipt(String conversationId, String kind, String userId, String position);
+
+  /** All receipt positions (delivered/read, per user) for a conversation. */
+  List<Receipt> receipts(String conversationId);
 }

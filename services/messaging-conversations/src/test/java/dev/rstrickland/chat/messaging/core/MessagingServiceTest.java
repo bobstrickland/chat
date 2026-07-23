@@ -19,10 +19,23 @@ class MessagingServiceTest {
     final List<Message> messages = new ArrayList<>();
     int ensureCalls = 0;
 
+    final Map<String, ConversationMeta> metaByConv = new LinkedHashMap<>();
+
     @Override
     public void ensureDirectConversation(String conversationId, String a, String b) {
       ensureCalls++;
       membersByConv.computeIfAbsent(conversationId, k -> List.of(a, b));
+    }
+
+    @Override
+    public void createGroup(String conversationId, String name, String createdBy, List<String> members) {
+      membersByConv.put(conversationId, List.copyOf(members));
+      metaByConv.put(conversationId, new ConversationMeta("group", name));
+    }
+
+    @Override
+    public ConversationMeta meta(String conversationId) {
+      return metaByConv.get(conversationId);
     }
 
     @Override
@@ -60,6 +73,28 @@ class MessagingServiceTest {
         }
       }
       return last;
+    }
+
+    final Map<String, Receipt> receiptItems = new LinkedHashMap<>(); // key: conv|kind|user
+
+    @Override
+    public void upsertReceipt(String conversationId, String kind, String userId, String position) {
+      String key = conversationId + "|" + kind + "|" + userId;
+      Receipt existing = receiptItems.get(key);
+      if (existing == null || existing.position().compareTo(position) < 0) {
+        receiptItems.put(key, new Receipt(userId, kind, position));
+      }
+    }
+
+    @Override
+    public List<Receipt> receipts(String conversationId) {
+      List<Receipt> out = new ArrayList<>();
+      for (var e : receiptItems.entrySet()) {
+        if (e.getKey().startsWith(conversationId + "|")) {
+          out.add(e.getValue());
+        }
+      }
+      return out;
     }
   }
 
@@ -130,6 +165,98 @@ class MessagingServiceTest {
     assertEquals("carol", list.get(0).peerId());
     assertEquals("hi carol", list.get(0).lastMessage().body());
     assertEquals("bob", list.get(1).peerId());
+  }
+
+  @Test
+  void createGroupIncludesCreatorAndPersistsMeta() {
+    FakeRepo repo = new FakeRepo();
+    String conv = new MessagingService(repo, new FakePublisher())
+        .createGroup("alice", "Team", List.of("bob", "carol"));
+    assertTrue(conv.startsWith("grp#"));
+    assertEquals(List.of("alice", "bob", "carol"), repo.membersByConv.get(conv));
+    assertEquals("Team", repo.metaByConv.get(conv).name());
+  }
+
+  @Test
+  void createGroupRejectsBlankNameAndSoleMember() {
+    MessagingService svc = new MessagingService(new FakeRepo(), new FakePublisher());
+    assertThrows(IllegalArgumentException.class, () -> svc.createGroup("alice", "  ", List.of("bob")));
+    // Only the creator (self-listed) -> not enough members.
+    assertThrows(IllegalArgumentException.class, () -> svc.createGroup("alice", "Solo", List.of("alice")));
+  }
+
+  @Test
+  void sendToGroupRequiresMembershipAndFansOutViaMessageSent() {
+    FakeRepo repo = new FakeRepo();
+    FakePublisher pub = new FakePublisher();
+    MessagingService svc = new MessagingService(repo, pub);
+    String conv = svc.createGroup("alice", "Team", List.of("bob", "carol"));
+
+    Message m = svc.sendToConversation("bob", conv, "hi team");
+    assertEquals(conv, m.conversationId());
+    assertEquals(1, pub.published.size());
+
+    // A non-member cannot send.
+    assertThrows(IllegalStateException.class, () -> svc.sendToConversation("mallory", conv, "sneak"));
+  }
+
+  @Test
+  void sendToUnknownGroupIsNotFound() {
+    MessagingService svc = new MessagingService(new FakeRepo(), new FakePublisher());
+    assertThrows(IllegalStateException.class, () -> svc.sendToConversation("alice", "grp#missing", "x"));
+  }
+
+  @Test
+  void cannotSendToADirectYouAreNotPartOf() {
+    MessagingService svc = new MessagingService(new FakeRepo(), new FakePublisher());
+    String someoneElsesDm = MessagingService.directConversationId("bob", "carol");
+    assertThrows(IllegalStateException.class, () -> svc.sendToConversation("alice", someoneElsesDm, "x"));
+  }
+
+  @Test
+  void listConversationsLabelsGroupsWithNameAndDirectsWithPeer() {
+    FakeRepo repo = new FakeRepo();
+    MessagingService svc = new MessagingService(repo, new FakePublisher());
+    svc.sendDirect("alice", "bob", "hi"); // direct
+    String group = svc.createGroup("alice", "Team", List.of("bob", "carol"));
+    svc.sendToConversation("alice", group, "hey team"); // group (newer)
+
+    List<ConversationSummary> list = svc.listConversations("alice");
+    ConversationSummary top = list.get(0); // group is most recent
+    assertEquals("group", top.type());
+    assertEquals("Team", top.name());
+    ConversationSummary direct = list.stream().filter(c -> c.type().equals("direct")).findFirst().orElseThrow();
+    assertEquals("bob", direct.peerId());
+  }
+
+  @Test
+  void recordReceiptStoresPositionAndReturnsMembersForFanout() {
+    FakeRepo repo = new FakeRepo();
+    MessagingService svc = new MessagingService(repo, new FakePublisher());
+    String conv = svc.createGroup("alice", "Team", List.of("bob", "carol"));
+
+    List<String> members = svc.recordReceipt("bob", conv, "read", "2026-01-01T00:00:05Z");
+    assertEquals(List.of("alice", "bob", "carol"), members);
+    assertEquals("2026-01-01T00:00:05Z", repo.receiptItems.get(conv + "|read|bob").position());
+  }
+
+  @Test
+  void receiptPositionOnlyMovesForward() {
+    FakeRepo repo = new FakeRepo();
+    MessagingService svc = new MessagingService(repo, new FakePublisher());
+    String conv = svc.createGroup("alice", "Team", List.of("bob"));
+    svc.recordReceipt("bob", conv, "read", "2026-01-01T00:00:10Z");
+    svc.recordReceipt("bob", conv, "read", "2026-01-01T00:00:05Z"); // older, ignored
+    assertEquals("2026-01-01T00:00:10Z", repo.receiptItems.get(conv + "|read|bob").position());
+  }
+
+  @Test
+  void recordReceiptRejectsBadKindAndNonMembers() {
+    FakeRepo repo = new FakeRepo();
+    MessagingService svc = new MessagingService(repo, new FakePublisher());
+    String conv = svc.createGroup("alice", "Team", List.of("bob"));
+    assertThrows(IllegalArgumentException.class, () -> svc.recordReceipt("bob", conv, "seen", "2026-01-01T00:00:00Z"));
+    assertThrows(IllegalStateException.class, () -> svc.recordReceipt("mallory", conv, "read", "2026-01-01T00:00:00Z"));
   }
 
   @Test

@@ -83,19 +83,26 @@ public final class HttpServerMain {
     }
   }
 
+  /** GET /conversations -> list; POST /conversations -> create a group. */
   private void handleList(HttpExchange ex) throws IOException {
-    if (!"GET".equals(ex.getRequestMethod())) {
-      respond(ex, 405, Map.of("error", "method not allowed"));
-      return;
-    }
     String userId = authenticate(ex);
     if (userId == null) {
+      return;
+    }
+    if ("POST".equals(ex.getRequestMethod())) {
+      handleCreateGroup(ex, userId);
+      return;
+    }
+    if (!"GET".equals(ex.getRequestMethod())) {
+      respond(ex, 405, Map.of("error", "method not allowed"));
       return;
     }
     List<Map<String, Object>> out = new ArrayList<>();
     for (var c : config.messaging.listConversations(userId)) {
       Map<String, Object> row = new LinkedHashMap<>();
       row.put("conversationId", c.conversationId());
+      row.put("type", c.type());
+      row.put("name", c.name());
       row.put("peerId", c.peerId());
       row.put("lastMessage", c.lastMessage() == null ? null : messageMap(c.lastMessage()));
       out.add(row);
@@ -103,36 +110,111 @@ public final class HttpServerMain {
     respond(ex, 200, Map.of("conversations", out));
   }
 
-  private void handleHistory(HttpExchange ex) throws IOException {
-    if (!"GET".equals(ex.getRequestMethod())) {
-      respond(ex, 405, Map.of("error", "method not allowed"));
-      return;
+  private void handleCreateGroup(HttpExchange ex, String userId) throws IOException {
+    JsonNode body = MAPPER.readTree(ex.getRequestBody());
+    String name = text(body, "name");
+    List<String> memberIds = new ArrayList<>();
+    JsonNode members = body.get("memberIds");
+    if (members != null && members.isArray()) {
+      members.forEach(m -> memberIds.add(m.asText()));
     }
+    try {
+      String conversationId = config.messaging.createGroup(userId, name, memberIds);
+      respond(ex, 201, Map.of("conversationId", conversationId, "type", "group", "name", name));
+    } catch (IllegalArgumentException e) {
+      respond(ex, 400, Map.of("error", e.getMessage()));
+    }
+  }
+
+  /**
+   * Dispatches the /conversations/... message routes:
+   *   GET  /conversations/direct/{peerId}/messages  — direct history (legacy)
+   *   GET  /conversations/{conversationId}/messages  — history (direct or group)
+   *   POST /conversations/{conversationId}/messages  — send (direct or group)
+   * The {conversationId} contains '#' (dm#a#b / grp#uuid); the client URL-encodes
+   * it and getPath() decodes it back — '#' isn't a path separator, so it survives
+   * as a single segment.
+   */
+  private void handleHistory(HttpExchange ex) throws IOException {
     String userId = authenticate(ex);
     if (userId == null) {
       return;
     }
-    // /conversations/direct/{peerId}/messages
-    String path = ex.getRequestURI().getPath();
-    String rest = path.substring("/conversations/".length());
+    String rest = ex.getRequestURI().getPath().substring("/conversations/".length());
     String[] parts = rest.split("/");
-    if (parts.length != 3 || !parts[0].equals("direct") || !parts[2].equals("messages")) {
+
+    // Legacy direct-by-peer route.
+    if (parts.length == 3 && parts[0].equals("direct") && parts[2].equals("messages")) {
+      String peerId = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+      String conversationId = MessagingService.directConversationId(userId, peerId);
+      handleGuarded(ex, () -> respondHistory(ex, userId, conversationId,
+          config.messaging.directHistory(userId, peerId, 200)));
+      return;
+    }
+    if (parts.length != 2) {
       respond(ex, 404, Map.of("error", "not found"));
       return;
     }
-    String peerId = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
-    List<Message> messages = config.messaging.directHistory(userId, peerId, 200);
+    String conversationId = URLDecoder.decode(parts[0], StandardCharsets.UTF_8);
+    String method = ex.getRequestMethod();
 
-    List<Map<String, Object>> out = new ArrayList<>(messages.size());
-    for (Message m : messages) {
-      out.add(messageMap(m));
+    // /conversations/{conversationId}/messages
+    if (parts[1].equals("messages")) {
+      if ("GET".equals(method)) {
+        handleGuarded(ex, () -> respondHistory(ex, userId, conversationId,
+            config.messaging.conversationHistory(userId, conversationId, 200)));
+      } else if ("POST".equals(method)) {
+        JsonNode body = MAPPER.readTree(ex.getRequestBody());
+        handleGuarded(ex, () -> {
+          Message m = config.messaging.sendToConversation(userId, conversationId, text(body, "body"));
+          respond(ex, 201, messageMap(m));
+        });
+      } else {
+        respond(ex, 405, Map.of("error", "method not allowed"));
+      }
+      return;
     }
-    respond(
-        ex,
-        200,
-        Map.of(
-            "conversationId", MessagingService.directConversationId(userId, peerId),
-            "messages", out));
+    // POST /conversations/{conversationId}/receipts { kind, position }
+    if (parts[1].equals("receipts") && "POST".equals(method)) {
+      JsonNode body = MAPPER.readTree(ex.getRequestBody());
+      handleGuarded(ex, () -> {
+        String kind = text(body, "kind");
+        String position = text(body, "position");
+        List<String> members = config.messaging.recordReceipt(userId, conversationId, kind, position);
+        config.receiptBroadcaster.broadcast(conversationId, userId, kind, position, members);
+        respond(ex, 200, Map.of("ok", true));
+      });
+      return;
+    }
+    respond(ex, 404, Map.of("error", "not found"));
+  }
+
+  private void respondHistory(
+      HttpExchange ex, String userId, String conversationId, List<Message> messages) throws IOException {
+    List<Map<String, Object>> msgs = new ArrayList<>();
+    for (Message m : messages) {
+      msgs.add(messageMap(m));
+    }
+    List<Map<String, Object>> receipts = new ArrayList<>();
+    for (var r : config.messaging.conversationReceipts(userId, conversationId)) {
+      receipts.add(Map.of("userId", r.userId(), "kind", r.kind(), "position", r.position()));
+    }
+    respond(ex, 200, Map.of("conversationId", conversationId, "messages", msgs, "receipts", receipts));
+  }
+
+  private interface Body {
+    void run() throws IOException;
+  }
+
+  /** Runs a handler, mapping core exceptions: validation -> 400, membership -> 403. */
+  private void handleGuarded(HttpExchange ex, Body body) throws IOException {
+    try {
+      body.run();
+    } catch (IllegalArgumentException e) {
+      respond(ex, 400, Map.of("error", e.getMessage()));
+    } catch (IllegalStateException e) {
+      respond(ex, 403, Map.of("error", e.getMessage()));
+    }
   }
 
   // --- helpers --------------------------------------------------------------

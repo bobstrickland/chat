@@ -7,6 +7,8 @@ import dev.rstrickland.chat.messaging.clients.KafkaMessagePublisher;
 import dev.rstrickland.chat.messaging.clients.KafkaNotificationPublisher;
 import dev.rstrickland.chat.messaging.clients.MessageJson;
 import dev.rstrickland.chat.messaging.clients.PresenceConnectionLookup;
+import dev.rstrickland.chat.messaging.clients.ReceiptJson;
+import dev.rstrickland.chat.messaging.core.ReceiptBroadcaster;
 import dev.rstrickland.chat.messaging.clients.TokenVerifier;
 import dev.rstrickland.chat.messaging.clients.WsShimConnectionPusher;
 import dev.rstrickland.chat.messaging.core.DeliveryService;
@@ -26,16 +28,19 @@ public final class Config {
   public final MessagingService messaging;
   public final TokenVerifier verifier;
   public final KafkaDeliveryConsumer deliveryConsumer;
+  public final ReceiptBroadcaster receiptBroadcaster;
   public final int port;
 
   private Config(
       MessagingService messaging,
       TokenVerifier verifier,
       KafkaDeliveryConsumer deliveryConsumer,
+      ReceiptBroadcaster receiptBroadcaster,
       int port) {
     this.messaging = messaging;
     this.verifier = verifier;
     this.deliveryConsumer = deliveryConsumer;
+    this.receiptBroadcaster = receiptBroadcaster;
     this.port = port;
   }
 
@@ -95,6 +100,9 @@ public final class Config {
     var delivery = new DeliveryService(repository, lookup, pusher, notificationPublisher, json::toFrame);
     var deliveryConsumer = new KafkaDeliveryConsumer(brokers, topic, deliveryGroup, delivery);
 
-    return new Config(messaging, verifier, deliveryConsumer, port);
+    ReceiptJson receiptJson = new ReceiptJson();
+    var receiptBroadcaster = new ReceiptBroadcaster(lookup, pusher, receiptJson::toFrame);
+
+    return new Config(messaging, verifier, deliveryConsumer, receiptBroadcaster, port);
   }
 }
