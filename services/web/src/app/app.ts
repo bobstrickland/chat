@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import { TokenStore } from './core/token-store';
 import { AuthService } from './core/auth.service';
+import { PresenceService } from './core/presence.service';
 
 @Component({
   selector: 'app-root',
@@ -16,6 +17,10 @@ export class App {
   // `isAuthenticated` is a signal, read directly in the template — it re-renders
   // the nav the moment tokens are set or cleared.
   protected readonly tokenStore = inject(TokenStore);
+
+  // Injected purely to instantiate it at app start: its constructor sets up the
+  // effect that opens/closes the presence WebSocket as auth state changes.
+  private readonly presence = inject(PresenceService);
 
   logout(): void {
     this.auth.logout();

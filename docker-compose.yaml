@@ -14,6 +14,7 @@ services:
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     container_name: redpanda
+    user: root   # bind-mounted ./DATA/redpanda-data is root-owned — same fix as dynamodb-local
     command:
       - redpanda
       - start
@@ -87,6 +88,9 @@ services:
       - "8090:8090"
     environment:
       - PORT=8090
+      # Forward $connect/$disconnect/$default route events to Presence (Phase 3).
+      - WS_SHIM_ROUTE_TARGET=http://presence-service:3000
+    depends_on: [presence-service]
 
   # ---- application services ----
   # Uncomment as each service is scaffolded. Each points src/adapters/httpServer.js
@@ -110,11 +114,11 @@ services:
   #   ports: ["3003:3000"]
   #   depends_on: [dynamodb-local, redpanda]
 
-  # presence-service:
-  #   build: ./services/presence-connection
-  #   env_file: .env
-  #   ports: ["3004:3000"]
-  #   depends_on: [dynamodb-local, redpanda]
+  presence-service:
+    build: ./services/presence-connection
+    env_file: .env
+    ports: ["3004:3000"]
+    depends_on: [dynamodb-local, redpanda]
 
   # notification-service:
   #   build: ./services/notification

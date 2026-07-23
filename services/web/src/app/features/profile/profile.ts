@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { PresencePanelComponent } from '../presence/presence-panel';
 import { ProfileService } from '../../core/profile.service';
 import { Profile } from '../../core/models';
 import { errorMessage } from '../../core/http-error';
@@ -16,7 +17,7 @@ import { errorMessage } from '../../core/http-error';
  */
 @Component({
   selector: 'app-profile',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, PresencePanelComponent],
   template: `
     <section class="card">
       <h1>Your profile</h1>
@@ -66,6 +67,8 @@ import { errorMessage } from '../../core/http-error';
 
       <p class="alt"><a routerLink="/mfa-enroll">Set up two-factor auth</a></p>
     </section>
+
+    <app-presence-panel />
   `,
 })
 export class ProfileComponent implements OnInit {

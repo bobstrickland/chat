@@ -107,6 +107,16 @@ resource "aws_dynamodb_table" "presence_connections" {
     type = "S"
   }
 
+  # $disconnect (and the ApiGatewayManagementApi) only knows the connectionId,
+  # but the table is keyed by userId. This GSI resolves connectionId -> userId
+  # so a disconnect can find and delete the right item. KEYS_ONLY is enough:
+  # the projected table keys already include userId.
+  global_secondary_index {
+    name            = "gsi-connection"
+    hash_key        = "connectionId"
+    projection_type = "KEYS_ONLY"
+  }
+
   ttl {
     attribute_name = "expiresAt"
     enabled        = true

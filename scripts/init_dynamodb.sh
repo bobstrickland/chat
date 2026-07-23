@@ -89,6 +89,14 @@ create_presence_connections_table() {
     --key-schema \
         AttributeName=userId,KeyType=HASH \
         AttributeName=connectionId,KeyType=RANGE \
+    --global-secondary-indexes \
+        '[{
+          "IndexName": "gsi-connection",
+          "KeySchema": [
+            {"AttributeName": "connectionId", "KeyType": "HASH"}
+          ],
+          "Projection": {"ProjectionType": "KEYS_ONLY"}
+        }]' \
     --billing-mode PAY_PER_REQUEST
 
   echo "enabling TTL on: $name (attribute: expiresAt)"
