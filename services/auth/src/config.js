@@ -1,6 +1,7 @@
 import { createCognitoClient } from "./clients/cognitoClient.js";
 import { createDynamoClient } from "./clients/dynamoClient.js";
 import { createUserRepository } from "./clients/userRepository.js";
+import { createProfileServiceClient } from "./clients/profileServiceClient.js";
 import { CognitoProvider } from "./providers/CognitoProvider.js";
 import { LocalAuthProvider } from "./providers/LocalAuthProvider.js";
 
@@ -62,5 +63,9 @@ export function getDependencies() {
   return {
     identityProvider: getIdentityProvider(),
     userRepository: createUserRepository(docClient, process.env.USERS_TABLE),
+    profileService: createProfileServiceClient({
+      baseUrl: process.env.PROFILE_SERVICE_URL,
+      internalApiKey: process.env.PROFILE_INTERNAL_API_KEY,
+    }),
   };
 }

@@ -47,6 +47,13 @@ const opts = reachable
 
 const event = (email, sub) => ({ request: { userAttributes: { email, sub } } });
 
+// PROFILE_SERVICE_URL / PROFILE_INTERNAL_API_KEY are intentionally left unset
+// here: these tests cover Auth's own half of postConfirmation, and Profile is
+// a separate service that must not be a test dependency. Provisioning
+// therefore fails on every case below and logs — that is the behaviour under
+// test, asserted explicitly in "confirmation succeeds even when profile
+// provisioning fails". Don't silence the log without keeping that guarantee.
+
 test("flips an existing UNCONFIRMED row to CONFIRMED", opts, async () => {
   const email = `pc-existing-${Date.now()}@example.com`;
   await repo.putUser({ email, userId: "sub-1", status: "UNCONFIRMED" });
@@ -87,4 +94,18 @@ test("does not clobber userId or createdAt on re-confirm", opts, async () => {
 test("echoes the event back for Cognito", opts, async () => {
   const e = event(`pc-echo-${Date.now()}@example.com`, "sub-4");
   assert.equal(await postConfirmation(e), e);
+});
+
+test("confirmation succeeds even when profile provisioning fails", opts, async () => {
+  // A throwing postConfirmation fails the user's confirmation in Cognito, so
+  // Profile being unreachable must never propagate. Provisioning is
+  // unconfigured in this suite, which is exactly that failure mode.
+  const email = `pc-degraded-${Date.now()}@example.com`;
+  const e = event(email, "sub-5");
+
+  const returned = await postConfirmation(e);
+
+  assert.equal(returned, e, "event must still be echoed back to Cognito");
+  const row = await repo.getUser({ email });
+  assert.equal(row.status, "CONFIRMED", "Auth's own half must still commit");
 });

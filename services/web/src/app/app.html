@@ -1,0 +1,17 @@
+<header class="topbar">
+  <a class="brand" routerLink="/">chat</a>
+  <nav>
+    @if (tokenStore.isAuthenticated()) {
+      <a routerLink="/profile">Profile</a>
+      <a routerLink="/mfa-enroll">2FA</a>
+      <button type="button" class="link" (click)="logout()">Sign out</button>
+    } @else {
+      <a routerLink="/login">Sign in</a>
+      <a routerLink="/register">Register</a>
+    }
+  </nav>
+</header>
+
+<main>
+  <router-outlet />
+</main>

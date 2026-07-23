@@ -12,17 +12,27 @@ import { getDependencies } from "../config.js";
  */
 export const postConfirmation = async (event) => {
   const { sub, email } = event.request.userAttributes;
-  const { userRepository } = getDependencies();
+  const { userRepository, profileService } = getDependencies();
 
   // Auth's own record: flip UNCONFIRMED -> CONFIRMED. Also the reconciliation
   // point for a registration whose Users write was dropped — markConfirmed
   // upserts, so the row exists either way.
   await userRepository.markConfirmed({ email, userId: sub });
 
-  // TODO: call Profile Service (or publish a `user.registered` event to
-  // MSK) once that service/topic exists. Intentionally not implemented yet
-  // — see build sequence Phase 2. Note this stays separate from the write
-  // above: profile provisioning is Profile Service's data, not Auth's.
+  // Profile provisioning (Phase 2). Cross-service API call — Auth never
+  // writes the `profiles` table itself. Best-effort: a failure here must not
+  // fail the user's confirmation, and provisioning is idempotent on the
+  // Profile side, so a Cognito trigger retry converges rather than duplicating.
+  try {
+    await profileService.provisionProfile({ userId: sub, email });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[postConfirmation] profile provisioning failed for userId=${sub}: ${err.message} ` +
+        `— account is usable but has no profile; re-provision manually or via replay`
+    );
+  }
+
   // eslint-disable-next-line no-console
   console.log(`post-confirmation: user confirmed userId=${sub} email=${email}`);
 

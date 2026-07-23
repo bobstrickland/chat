@@ -1,0 +1,17 @@
+{
+  "name": "profile-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/adapters/httpServer.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.1.0"
+  }
+}

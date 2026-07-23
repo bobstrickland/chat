@@ -98,11 +98,11 @@ services:
     ports: ["3001:3000"]
     depends_on: [dynamodb-local, localstack]
 
-  # profile-service:
-  #   build: ./services/profile
-  #   env_file: .env
-  #   ports: ["3002:3000"]
-  #   depends_on: [dynamodb-local]
+  profile-service:
+    build: ./services/profile
+    env_file: .env
+    ports: ["3002:3000"]
+    depends_on: [dynamodb-local]
 
   # messaging-service:
   #   build: ./services/messaging-conversations
