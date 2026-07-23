@@ -1,101 +1,132 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MessagingService } from '../../core/messaging.service';
+import { ConversationsService } from '../../core/conversations.service';
 import { RealtimeService } from '../../core/realtime.service';
 import { errorMessage } from '../../core/http-error';
 
 /**
- * Minimal single-conversation view (Phase 4): pick a peer by userId, load
- * history, send, and receive in real time over the shared WebSocket. Enough to
- * run the two-browser delivery test. A real contact list replaces the peer-id
- * box in Phase 6 (groups/contacts).
+ * Two-pane chat (Phase 4 + conversation list). Left: your conversations, live —
+ * a message from anyone shows up here with an unread count even if their chat
+ * isn't open. Right: the open conversation. A "new chat" box lets you start one
+ * by user id (a real contact picker is Phase 6).
  */
 @Component({
   selector: 'app-chat',
   imports: [FormsModule],
   template: `
-    <section class="card">
-      <h1>Chat</h1>
+    <section class="chat">
+      <aside class="list">
+        <form class="newchat" (ngSubmit)="startNew()">
+          <input type="text" [(ngModel)]="newPeerId" name="newPeer" placeholder="Start chat: user id" />
+          <button type="submit" [disabled]="!newPeerId.trim()">+</button>
+        </form>
 
-      <div class="peer">
-        <label>
-          Peer user id
-          <input type="text" [(ngModel)]="peerId" placeholder="the other user's id" />
-        </label>
-        <button type="button" (click)="open()" [disabled]="!peerId.trim() || loading()">
-          {{ loading() ? 'Opening…' : 'Open' }}
-        </button>
-        <span class="dot" [class.on]="realtime.connectionState() === 'online'"
-              title="live connection"></span>
-      </div>
-
-      @if (error()) { <p class="err">{{ error() }}</p> }
-
-      @if (messaging.conversationId()) {
-        <ul class="messages">
-          @for (m of messaging.messages(); track m.messageId) {
-            <li [class.mine]="m.mine">
-              <span class="bubble">{{ m.body }}</span>
+        <ul>
+          @for (c of conversations.conversations(); track c.conversationId) {
+            <li [class.active]="c.conversationId === openConversationId()" (click)="open(c.peerId)">
+              <div class="row1">
+                <span class="name">{{ c.peerName }}</span>
+                @if (c.unread > 0) { <span class="badge">{{ c.unread }}</span> }
+              </div>
+              <div class="preview">{{ c.lastBody ?? '—' }}</div>
             </li>
           } @empty {
-            <li class="muted">No messages yet — say hello.</li>
+            <li class="muted empty">No conversations yet.</li>
           }
         </ul>
+      </aside>
 
-        <form class="composer" (ngSubmit)="send()">
-          <input type="text" [(ngModel)]="draft" name="draft" placeholder="Message…"
-                 autocomplete="off" />
-          <button type="submit" [disabled]="!draft.trim()">Send</button>
-        </form>
-      }
+      <div class="pane">
+        @if (openConversationId()) {
+          <ul class="messages">
+            @for (m of messaging.messages(); track m.messageId) {
+              <li [class.mine]="m.mine"><span class="bubble">{{ m.body }}</span></li>
+            } @empty {
+              <li class="muted">No messages yet — say hello.</li>
+            }
+          </ul>
+          <form class="composer" (ngSubmit)="send()">
+            <input type="text" [(ngModel)]="draft" name="draft" placeholder="Message…" autocomplete="off" />
+            <button type="submit" [disabled]="!draft.trim()">Send</button>
+          </form>
+        } @else {
+          <p class="muted placeholder">Select a conversation, or start a new one.</p>
+        }
+        @if (error()) { <p class="err">{{ error() }}</p> }
+        <span class="conn" [class.on]="realtime.connectionState() === 'online'" title="live connection"></span>
+      </div>
     </section>
   `,
   styles: [
     `
-      .peer { display: flex; align-items: flex-end; gap: 0.5rem; }
-      .peer label { flex: 1; }
-      .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--muted); }
-      .dot.on { background: var(--ok); }
-      .messages { list-style: none; padding: 0; margin: 1.25rem 0; display: flex; flex-direction: column; gap: 0.4rem; }
+      .chat { display: flex; gap: 1rem; align-items: stretch; min-height: 24rem; }
+      .list { width: 14rem; border-right: 1px solid var(--border); padding-right: 0.75rem; }
+      .newchat { display: flex; gap: 0.35rem; margin-bottom: 0.75rem; }
+      .newchat input { flex: 1; }
+      .list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+      .list li { padding: 0.45rem 0.5rem; border-radius: 8px; cursor: pointer; }
+      .list li:hover { background: var(--bg); }
+      .list li.active { background: var(--bg); outline: 1px solid var(--border); }
+      .list li.empty { cursor: default; }
+      .row1 { display: flex; justify-content: space-between; align-items: center; }
+      .name { font-weight: 600; font-size: 0.9rem; }
+      .badge { background: var(--accent); color: var(--accent-text); border-radius: 10px; font-size: 0.7rem; padding: 0 0.4rem; }
+      .preview { color: var(--muted); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pane { flex: 1; display: flex; flex-direction: column; position: relative; }
+      .placeholder { margin: auto; }
+      .messages { list-style: none; padding: 0; margin: 0 0 auto; display: flex; flex-direction: column; gap: 0.4rem; }
       .messages li { display: flex; }
       .messages li.mine { justify-content: flex-end; }
       .bubble { padding: 0.4rem 0.7rem; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); max-width: 75%; }
       li.mine .bubble { background: var(--accent); color: var(--accent-text); border-color: transparent; }
-      .muted { color: var(--muted); }
-      .composer { display: flex; gap: 0.5rem; }
+      .composer { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
       .composer input { flex: 1; }
+      .muted { color: var(--muted); }
+      .conn { position: absolute; top: 0; right: 0; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--muted); }
+      .conn.on { background: var(--ok); }
     `,
   ],
 })
 export class ChatComponent {
   protected readonly messaging = inject(MessagingService);
+  protected readonly conversations = inject(ConversationsService);
   protected readonly realtime = inject(RealtimeService);
 
-  protected peerId = '';
+  protected newPeerId = '';
   protected draft = '';
-  protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly openConversationId = this.messaging.conversationId;
 
-  async open(): Promise<void> {
-    this.loading.set(true);
+  async open(peerId: string): Promise<void> {
     this.error.set(null);
     try {
-      await this.messaging.open(this.peerId.trim());
+      await this.messaging.open(peerId);
+      const id = this.messaging.conversationId();
+      if (id) this.conversations.markRead(id);
     } catch (err) {
       this.error.set(errorMessage(err));
-    } finally {
-      this.loading.set(false);
     }
+  }
+
+  async startNew(): Promise<void> {
+    const peer = this.newPeerId.trim();
+    this.newPeerId = '';
+    await this.open(peer);
   }
 
   async send(): Promise<void> {
     const body = this.draft;
     this.draft = '';
     try {
-      await this.messaging.send(body);
+      const sent = await this.messaging.send(body);
+      const peer = this.messaging.currentPeerId();
+      if (sent && peer) {
+        this.conversations.recordOutgoing(sent.conversationId, peer, sent.body, sent.sentAt);
+      }
     } catch (err) {
       this.error.set(errorMessage(err));
-      this.draft = body; // restore on failure
+      this.draft = body;
     }
   }
 }

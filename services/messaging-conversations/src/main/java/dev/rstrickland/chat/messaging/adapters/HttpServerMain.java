@@ -52,6 +52,8 @@ public final class HttpServerMain {
     server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
     server.createContext("/health", this::handleHealth);
     server.createContext("/messages", this::handleSend);
+    // Longest-prefix match: "/conversations" (exact) -> list; "/conversations/..." -> history.
+    server.createContext("/conversations", this::handleList);
     server.createContext("/conversations/", this::handleHistory);
     server.start();
     System.out.println("messaging-conversations (HttpServer adapter) listening on :" + config.port);
@@ -79,6 +81,26 @@ public final class HttpServerMain {
     } catch (IllegalArgumentException e) {
       respond(ex, 400, Map.of("error", e.getMessage()));
     }
+  }
+
+  private void handleList(HttpExchange ex) throws IOException {
+    if (!"GET".equals(ex.getRequestMethod())) {
+      respond(ex, 405, Map.of("error", "method not allowed"));
+      return;
+    }
+    String userId = authenticate(ex);
+    if (userId == null) {
+      return;
+    }
+    List<Map<String, Object>> out = new ArrayList<>();
+    for (var c : config.messaging.listConversations(userId)) {
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("conversationId", c.conversationId());
+      row.put("peerId", c.peerId());
+      row.put("lastMessage", c.lastMessage() == null ? null : messageMap(c.lastMessage()));
+      out.add(row);
+    }
+    respond(ex, 200, Map.of("conversations", out));
   }
 
   private void handleHistory(HttpExchange ex) throws IOException {

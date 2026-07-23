@@ -61,8 +61,9 @@ export class MessagingService {
     this.messages.set(res.messages.map((m) => this.decorate(m)));
   }
 
-  async send(body: string): Promise<void> {
-    if (!this.peerId || !body.trim()) return;
+  /** @returns the persisted message (so callers can update the conversation list). */
+  async send(body: string): Promise<(Omit<ChatMessage, 'mine'>) | null> {
+    if (!this.peerId || !body.trim()) return null;
     const sent = await firstValueFrom(
       this.http.post<Omit<ChatMessage, 'mine'>>('/messages', {
         recipientId: this.peerId,
@@ -71,6 +72,12 @@ export class MessagingService {
     );
     // Append our own message locally — delivery skips the sender.
     this.append(sent);
+    return sent;
+  }
+
+  /** The peer of the currently-open conversation, if any. */
+  currentPeerId(): string | null {
+    return this.peerId;
   }
 
   private append(m: Omit<ChatMessage, 'mine'>): void {

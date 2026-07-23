@@ -31,6 +31,14 @@ class DeliveryServiceTest {
       public List<String> members(String c) {
         return c.equals(conv) ? members : List.of();
       }
+
+      public List<String> userConversations(String userId) {
+        return List.of();
+      }
+
+      public Message lastMessage(String c) {
+        return null;
+      }
     };
   }
 

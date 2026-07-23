@@ -39,6 +39,28 @@ class MessagingServiceTest {
     public List<String> members(String conversationId) {
       return membersByConv.getOrDefault(conversationId, List.of());
     }
+
+    @Override
+    public List<String> userConversations(String userId) {
+      List<String> ids = new ArrayList<>();
+      for (var e : membersByConv.entrySet()) {
+        if (e.getValue().contains(userId)) {
+          ids.add(e.getKey());
+        }
+      }
+      return ids;
+    }
+
+    @Override
+    public Message lastMessage(String conversationId) {
+      Message last = null;
+      for (Message m : messages) {
+        if (m.conversationId().equals(conversationId)) {
+          last = m;
+        }
+      }
+      return last;
+    }
   }
 
   static final class FakePublisher implements MessageEventPublisher {
@@ -86,6 +108,28 @@ class MessagingServiceTest {
     assertThrows(IllegalArgumentException.class, () -> svc.sendDirect("alice", "bob", "  "));
     assertThrows(IllegalArgumentException.class, () -> svc.sendDirect("alice", "", "hi"));
     assertThrows(IllegalArgumentException.class, () -> svc.sendDirect("alice", "alice", "hi"));
+  }
+
+  @Test
+  void directPeerIsTheOtherParticipant() {
+    String conv = MessagingService.directConversationId("alice", "bob");
+    assertEquals("bob", MessagingService.directPeer(conv, "alice"));
+    assertEquals("alice", MessagingService.directPeer(conv, "bob"));
+  }
+
+  @Test
+  void listsConversationsMostRecentFirstWithPeerAndPreview() {
+    FakeRepo repo = new FakeRepo();
+    MessagingService svc = new MessagingService(repo, new FakePublisher());
+    svc.sendDirect("alice", "bob", "hi bob");
+    svc.sendDirect("alice", "carol", "hi carol"); // newer
+
+    List<ConversationSummary> list = svc.listConversations("alice");
+    assertEquals(2, list.size());
+    // carol's conversation is most recent -> first
+    assertEquals("carol", list.get(0).peerId());
+    assertEquals("hi carol", list.get(0).lastMessage().body());
+    assertEquals("bob", list.get(1).peerId());
   }
 
   @Test

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { getDependencies, getInternalApiKey } from "../config.js";
 import { provisionProfile } from "../core/provisionProfile.js";
 import { getProfile } from "../core/getProfile.js";
+import { getMyProfile } from "../core/getMyProfile.js";
 import { updateProfile } from "../core/updateProfile.js";
 import { deleteProfile } from "../core/deleteProfile.js";
 
@@ -76,7 +77,12 @@ export const handler = async (event) => {
     const target = match[1] === "me" ? claims.userId : decodeURIComponent(match[1]);
 
     if (method === "GET") {
-      return reply(200, await getProfile(deps, { userId: target, callerUserId: claims.userId }));
+      // Own profile lazily provisions; others' 404 if missing.
+      const self = target === claims.userId;
+      const profile = self
+        ? await getMyProfile(deps, { userId: claims.userId, email: claims.email })
+        : await getProfile(deps, { userId: target, callerUserId: claims.userId });
+      return reply(200, profile);
     }
     if (method === "PATCH") {
       return reply(

@@ -68,6 +68,17 @@ public final class LambdaHandler implements RequestHandler<Map<String, Object>, 
                 userId, textOf(body, "recipientId"), textOf(body, "body"));
         return reply(201, messageMap(m));
       }
+      if ("GET".equals(method) && "/conversations".equals(path)) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (var c : config().messaging.listConversations(userId)) {
+          Map<String, Object> row = new LinkedHashMap<>();
+          row.put("conversationId", c.conversationId());
+          row.put("peerId", c.peerId());
+          row.put("lastMessage", c.lastMessage() == null ? null : messageMap(c.lastMessage()));
+          out.add(row);
+        }
+        return reply(200, Map.of("conversations", out));
+      }
       if ("GET".equals(method) && path.startsWith("/conversations/direct/")) {
         String peerId = path.split("/")[3];
         List<Map<String, Object>> out = new ArrayList<>();

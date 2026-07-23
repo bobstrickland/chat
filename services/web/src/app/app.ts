@@ -3,6 +3,7 @@ import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import { TokenStore } from './core/token-store';
 import { AuthService } from './core/auth.service';
 import { PresenceService } from './core/presence.service';
+import { ConversationsService } from './core/conversations.service';
 
 @Component({
   selector: 'app-root',
@@ -18,9 +19,11 @@ export class App {
   // the nav the moment tokens are set or cleared.
   protected readonly tokenStore = inject(TokenStore);
 
-  // Injected purely to instantiate it at app start: its constructor sets up the
-  // effect that opens/closes the presence WebSocket as auth state changes.
+  // Injected purely to instantiate them at app start: their constructors set up
+  // effects/subscriptions that must run session-wide (presence socket, and the
+  // inbox listener that keeps the unread badge live from any page).
   private readonly presence = inject(PresenceService);
+  protected readonly conversations = inject(ConversationsService);
 
   logout(): void {
     this.auth.logout();

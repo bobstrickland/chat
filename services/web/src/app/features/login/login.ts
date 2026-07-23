@@ -35,8 +35,14 @@ import { errorMessage } from '../../core/http-error';
             {{ loading() ? 'Signing in…' : 'Sign in' }}
           </button>
         </form>
+
+        <div class="divider"><span>or</span></div>
+        <button type="button" class="federated" (click)="signInWithGoogle()">
+          Continue with Google
+        </button>
+
         <p class="alt">No account? <a routerLink="/register">Create one</a></p>
-      } @else {
+      } @else if (stage() === 'mfa') {
         <p class="hint">Enter the 6-digit code from your authenticator app.</p>
         <form [formGroup]="mfa" (ngSubmit)="submitMfa()">
           <label>
@@ -133,5 +139,10 @@ export class LoginComponent {
     this.mfa.reset();
     this.error.set(null);
     this.stage.set('credentials');
+  }
+
+  signInWithGoogle(): void {
+    // Full-page redirect to Cognito Hosted UI; control returns to /auth/callback.
+    this.auth.startFederatedLogin('google');
   }
 }

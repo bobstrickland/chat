@@ -83,15 +83,15 @@ module "dynamodb" {
 # ---------------------------------------------------------------------------
 
 module "msk" {
-  source              = "../../modules/msk"
-  name_prefix         = var.name_prefix
-  vpc_id              = module.vpc.vpc_id
-  private_subnet_ids  = module.vpc.private_subnet_ids
-  kms_key_arn         = aws_kms_key.app.arn
+  source             = "../../modules/msk"
+  name_prefix        = var.name_prefix
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  kms_key_arn        = aws_kms_key.app.arn
   # dev sizing — 2 brokers, small instance
   number_of_broker_nodes = 2
   broker_instance_type   = "kafka.t3.small"
-  tags                    = local.tags
+  tags                   = local.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -115,14 +115,23 @@ module "dns_acm" {
 # ---------------------------------------------------------------------------
 
 module "cognito" {
-  source                         = "../../modules/cognito"
-  name_prefix                    = var.name_prefix
-  auth_domain_prefix             = "dev-auth-chat-rstrickland-dev"
-  custom_domain                  = "dev-auth.chat.rstrickland.dev"
-  acm_certificate_arn_us_east_1  = module.dns_acm.certificate_arn
-  mobile_callback_urls           = ["chatapp://callback"]
-  web_callback_urls              = ["https://dev-app.chat.rstrickland.dev/callback"]
-  web_logout_urls                = ["https://dev-app.chat.rstrickland.dev/logout"]
+  source                        = "../../modules/cognito"
+  name_prefix                   = var.name_prefix
+  auth_domain_prefix            = "dev-auth-chat-rstrickland-dev"
+  custom_domain                 = "dev-auth.chat.rstrickland.dev"
+  acm_certificate_arn_us_east_1 = module.dns_acm.certificate_arn
+  mobile_callback_urls          = ["chatapp://callback"]
+  # localhost entries let the Angular dev client (:4200) complete the Hosted-UI
+  # OAuth redirect during local development; the dev-app.* entries are the real
+  # deployed client.
+  web_callback_urls = [
+    "https://dev-app.chat.rstrickland.dev/callback",
+    "http://localhost:4200/oauth2/callback",
+  ]
+  web_logout_urls = [
+    "https://dev-app.chat.rstrickland.dev/logout",
+    "http://localhost:4200/",
+  ]
 
   google_client_id     = var.google_client_id
   google_client_secret = var.google_client_secret
@@ -145,19 +154,19 @@ module "iam" {
   region      = var.region
 
   dynamodb_table_arns = {
-    "auth"                     = [module.dynamodb.table_arns["users"]]
-    "profile"                  = [module.dynamodb.table_arns["profiles"]]
-    "messaging-conversations"  = [module.dynamodb.table_arns["conversations"]]
-    "presence-connection"      = [module.dynamodb.table_arns["presence_connections"]]
-    "notification"             = [module.dynamodb.table_arns["device_tokens"]]
-    "media"                    = [module.dynamodb.table_arns["media_metadata"]]
-    "search"                   = [] # reads via DynamoDB Streams, granted separately if needed
+    "auth"                    = [module.dynamodb.table_arns["users"]]
+    "profile"                 = [module.dynamodb.table_arns["profiles"]]
+    "messaging-conversations" = [module.dynamodb.table_arns["conversations"]]
+    "presence-connection"     = [module.dynamodb.table_arns["presence_connections"]]
+    "notification"            = [module.dynamodb.table_arns["device_tokens"]]
+    "media"                   = [module.dynamodb.table_arns["media_metadata"]]
+    "search"                  = [] # reads via DynamoDB Streams, granted separately if needed
   }
 
-  msk_cluster_arn        = module.msk.cluster_arn
-  media_bucket_arn        = aws_s3_bucket.media.arn
-  kms_key_arn             = aws_kms_key.app.arn
-  cognito_user_pool_arn   = module.cognito.user_pool_arn
+  msk_cluster_arn       = module.msk.cluster_arn
+  media_bucket_arn      = aws_s3_bucket.media.arn
+  kms_key_arn           = aws_kms_key.app.arn
+  cognito_user_pool_arn = module.cognito.user_pool_arn
 
   tags = local.tags
 }
@@ -228,8 +237,8 @@ resource "aws_cloudfront_distribution" "web" {
   default_cache_behavior {
     target_origin_id       = "web-s3-origin"
     viewer_protocol_policy = "redirect-to-https"
-    allowed_methods         = ["GET", "HEAD"]
-    cached_methods           = ["GET", "HEAD"]
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
 
     forwarded_values {
       query_string = false
@@ -284,17 +293,17 @@ resource "aws_route53_record" "auth" {
 # ---------------------------------------------------------------------------
 
 module "ci_cd" {
-  source              = "../../modules/ci_cd"
-  name_prefix         = var.name_prefix
-  account_id          = var.account_id
-  region              = var.region
-  github_org          = var.github_org
-  github_repo         = var.github_repo
-  vpc_id              = module.vpc.vpc_id
-  private_subnet_ids  = module.vpc.private_subnet_ids
+  source               = "../../modules/ci_cd"
+  name_prefix          = var.name_prefix
+  account_id           = var.account_id
+  region               = var.region
+  github_org           = var.github_org
+  github_repo          = var.github_repo
+  vpc_id               = module.vpc.vpc_id
+  private_subnet_ids   = module.vpc.private_subnet_ids
   state_bucket_arn     = aws_s3_bucket.terraform_state.arn
   state_lock_table_arn = aws_dynamodb_table.terraform_locks.arn
-  tags                  = local.tags
+  tags                 = local.tags
 }
 
 locals {

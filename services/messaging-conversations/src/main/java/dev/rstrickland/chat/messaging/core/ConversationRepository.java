@@ -23,4 +23,10 @@ public interface ConversationRepository {
 
   /** userIds of the conversation's members — the fan-out set for delivery. */
   List<String> members(String conversationId);
+
+  /** conversationIds this user belongs to (via gsi-user-conversations). */
+  List<String> userConversations(String userId);
+
+  /** The most recent message in a conversation, or null if there are none yet. */
+  Message lastMessage(String conversationId);
 }

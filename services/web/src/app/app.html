@@ -2,7 +2,7 @@
   <a class="brand" routerLink="/">chat</a>
   <nav>
     @if (tokenStore.isAuthenticated()) {
-      <a routerLink="/chat">Chat</a>
+      <a routerLink="/chat">Chat@if (conversations.totalUnread() > 0) { <span class="navbadge">{{ conversations.totalUnread() }}</span> }</a>
       <a routerLink="/profile">Profile</a>
       <a routerLink="/mfa-enroll">2FA</a>
       <button type="button" class="link" (click)="logout()">Sign out</button>

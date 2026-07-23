@@ -1,6 +1,8 @@
 package dev.rstrickland.chat.messaging.core;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -60,5 +62,43 @@ public final class MessagingService {
   /** History of the direct conversation between the caller and a peer. */
   public List<Message> directHistory(String userId, String peerId, int limit) {
     return repository.listMessages(directConversationId(userId, peerId), limit);
+  }
+
+  /**
+   * The user's conversation list, most-recently-active first. For each
+   * conversation the peer is derived from the deterministic id (no extra query),
+   * and the last message is fetched for a preview.
+   */
+  public List<ConversationSummary> listConversations(String userId) {
+    List<ConversationSummary> out = new ArrayList<>();
+    for (String conversationId : repository.userConversations(userId)) {
+      out.add(
+          new ConversationSummary(
+              conversationId,
+              directPeer(conversationId, userId),
+              repository.lastMessage(conversationId)));
+    }
+    // Most recent first; conversations with no messages sink to the bottom.
+    out.sort(
+        Comparator.comparing(
+                (ConversationSummary c) ->
+                    c.lastMessage() == null ? Instant.EPOCH : c.lastMessage().sentAt())
+            .reversed());
+    return out;
+  }
+
+  /**
+   * The other participant in a direct conversation id `dm#{a}#{b}`. Returns null
+   * for a non-direct id (groups, Phase 6) — the caller decides how to render those.
+   */
+  public static String directPeer(String conversationId, String userId) {
+    if (!conversationId.startsWith("dm#")) {
+      return null;
+    }
+    String[] parts = conversationId.split("#");
+    if (parts.length != 3) {
+      return null;
+    }
+    return parts[1].equals(userId) ? parts[2] : parts[1];
   }
 }

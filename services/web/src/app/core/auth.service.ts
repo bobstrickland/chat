@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, finalize, map, shareReplay, tap } from 'rxjs';
 import { TokenStore } from './token-store';
+import { AUTH_CONFIG, oauthRedirectUri } from './auth-config';
 import {
   LoginResult,
   MfaEnrollResult,
@@ -85,6 +86,35 @@ export class AuthService {
 
   logout(): void {
     this.tokenStore.clear();
+  }
+
+  // --- federated (Google via Cognito Hosted UI) -----------------------------
+
+  /**
+   * Kick off Google sign-in: full-page redirect to the Cognito Hosted UI, which
+   * brokers the Google OAuth and redirects back to `oauthRedirectUri()` with a
+   * `?code`. Not an XHR — the browser leaves the app and returns to /auth/callback.
+   */
+  startFederatedLogin(provider: 'google'): void {
+    const params = new URLSearchParams({
+      identity_provider: provider === 'google' ? 'Google' : provider,
+      redirect_uri: oauthRedirectUri(),
+      response_type: 'code',
+      client_id: AUTH_CONFIG.webClientId,
+      scope: AUTH_CONFIG.scopes.join(' '),
+    });
+    window.location.href = `${AUTH_CONFIG.hostedUiDomain}/oauth2/authorize?${params}`;
+  }
+
+  /**
+   * Exchange the returned auth code for tokens via the Auth service (which does
+   * the server-side call to Cognito's /oauth2/token). The redirectUri must match
+   * the one used to start the flow, exactly.
+   */
+  completeFederatedLogin(provider: 'google', code: string): Observable<Tokens> {
+    return this.http
+      .post<Tokens>('/auth/federated', { provider, code, redirectUri: oauthRedirectUri() })
+      .pipe(tap((res) => this.tokenStore.set(res)));
   }
 
   // --- single-flight refresh ------------------------------------------------

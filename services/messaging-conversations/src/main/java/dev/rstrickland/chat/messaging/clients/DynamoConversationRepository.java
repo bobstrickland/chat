@@ -120,6 +120,51 @@ public final class DynamoConversationRepository implements ConversationRepositor
     return messages;
   }
 
+  private static final String GSI_USER = "gsi-user-conversations";
+
+  @Override
+  public List<String> userConversations(String userId) {
+    QueryResponse resp =
+        client.query(
+            QueryRequest.builder()
+                .tableName(table)
+                .indexName(GSI_USER)
+                .keyConditionExpression("userId = :u")
+                .expressionAttributeValues(Map.of(":u", s(userId)))
+                .build());
+    List<String> ids = new ArrayList<>(resp.items().size());
+    for (Map<String, AttributeValue> item : resp.items()) {
+      AttributeValue v = item.get("conversationId");
+      if (v != null) {
+        ids.add(v.s());
+      }
+    }
+    return ids;
+  }
+
+  @Override
+  public Message lastMessage(String conversationId) {
+    QueryResponse resp =
+        client.query(
+            QueryRequest.builder()
+                .tableName(table)
+                .keyConditionExpression("conversationId = :c AND begins_with(sk, :p)")
+                .expressionAttributeValues(Map.of(":c", s(conversationId), ":p", s(MSG_PREFIX)))
+                .scanIndexForward(false) // newest first
+                .limit(1)
+                .build());
+    if (resp.items().isEmpty()) {
+      return null;
+    }
+    Map<String, AttributeValue> item = resp.items().get(0);
+    return new Message(
+        conversationId,
+        item.get("messageId").s(),
+        item.get("senderId").s(),
+        item.get("body").s(),
+        Instant.parse(item.get("sentAt").s()));
+  }
+
   @Override
   public List<String> members(String conversationId) {
     QueryResponse resp =

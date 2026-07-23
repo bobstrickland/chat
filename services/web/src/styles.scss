@@ -71,8 +71,19 @@ body {
   color: var(--accent);
 }
 
+.navbadge {
+  display: inline-block;
+  margin-left: 0.3rem;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 10px;
+  font-size: 0.7rem;
+  padding: 0 0.4rem;
+  vertical-align: middle;
+}
+
 main {
-  max-width: 30rem;
+  max-width: 52rem;
   margin: 2rem auto;
   padding: 0 1rem;
 }
@@ -82,6 +93,9 @@ main {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1.5rem;
+  max-width: 30rem; /* keep forms narrow; the chat view uses the full width */
+  margin-left: auto;
+  margin-right: auto;
 }
 
 h1 {
@@ -149,6 +163,34 @@ button.link:hover {
 .hint {
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 1rem 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+button.federated {
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.federated:hover {
+  border-color: var(--accent);
 }
 
 .alt {

@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 
 import { provisionProfile } from "../src/core/provisionProfile.js";
 import { getProfile } from "../src/core/getProfile.js";
+import { getMyProfile } from "../src/core/getMyProfile.js";
 import { updateProfile } from "../src/core/updateProfile.js";
 import { deleteProfile } from "../src/core/deleteProfile.js";
 import { createDynamoClient } from "../src/clients/dynamoClient.js";
@@ -83,6 +84,38 @@ test("provision is idempotent and never clobbers an edited profile", async () =>
 
 test("provision requires a userId", async () => {
   await assert.rejects(() => provisionProfile({ profileRepository: fakeRepo() }, {}), /userId is required/);
+});
+
+// ---------------------------------------------------------------------------
+// lazy provisioning (getMyProfile) — covers users no trigger provisioned,
+// notably federated (Google) users
+// ---------------------------------------------------------------------------
+
+test("getMyProfile creates a default profile when none exists", async () => {
+  const profileRepository = fakeRepo();
+  const profile = await getMyProfile({ profileRepository }, { userId: "u1", email: "grace@example.com" });
+  assert.equal(profile.userId, "u1");
+  assert.equal(profile.displayName, "grace");
+  assert.ok(await profileRepository.get({ userId: "u1" }), "profile was persisted");
+});
+
+test("getMyProfile falls back to New User with no usable email (e.g. access token)", async () => {
+  const profileRepository = fakeRepo();
+  const profile = await getMyProfile({ profileRepository }, { userId: "google-user", email: null });
+  assert.equal(profile.displayName, "New User");
+});
+
+test("getMyProfile returns the existing profile without clobbering edits", async () => {
+  const profileRepository = fakeRepo();
+  await getMyProfile({ profileRepository }, { userId: "u1", email: "a@example.com" });
+  await updateProfile({ profileRepository }, { userId: "u1", callerUserId: "u1", fields: { displayName: "Chosen" } });
+
+  const again = await getMyProfile({ profileRepository }, { userId: "u1", email: "a@example.com" });
+  assert.equal(again.displayName, "Chosen", "second access must not overwrite the edited name");
+});
+
+test("getMyProfile requires a userId", async () => {
+  await assert.rejects(() => getMyProfile({ profileRepository: fakeRepo() }, {}), /userId is required/);
 });
 
 // ---------------------------------------------------------------------------

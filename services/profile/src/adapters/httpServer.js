@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { getDependencies, getInternalApiKey } from "../config.js";
 import { provisionProfile } from "../core/provisionProfile.js";
 import { getProfile } from "../core/getProfile.js";
+import { getMyProfile } from "../core/getMyProfile.js";
 import { updateProfile } from "../core/updateProfile.js";
 import { deleteProfile } from "../core/deleteProfile.js";
 
@@ -68,9 +69,11 @@ app.post("/internal/profiles", internalOnly, async (req, res) => {
 });
 
 // ---- user-facing -----------------------------------------------------------
+// Reading your OWN profile lazily provisions it if absent (getMyProfile);
+// reading someone ELSE's still 404s if missing (getProfile).
 app.get("/profiles/me", authenticate, async (req, res) => {
   try {
-    res.json(await getProfile(deps, { userId: req.claims.userId, callerUserId: req.claims.userId }));
+    res.json(await getMyProfile(deps, { userId: req.claims.userId, email: req.claims.email }));
   } catch (err) {
     fail(res, err);
   }
@@ -78,7 +81,11 @@ app.get("/profiles/me", authenticate, async (req, res) => {
 
 app.get("/profiles/:userId", authenticate, async (req, res) => {
   try {
-    res.json(await getProfile(deps, { userId: req.params.userId, callerUserId: req.claims.userId }));
+    const self = req.params.userId === req.claims.userId;
+    const profile = self
+      ? await getMyProfile(deps, { userId: req.claims.userId, email: req.claims.email })
+      : await getProfile(deps, { userId: req.params.userId, callerUserId: req.claims.userId });
+    res.json(profile);
   } catch (err) {
     fail(res, err);
   }
