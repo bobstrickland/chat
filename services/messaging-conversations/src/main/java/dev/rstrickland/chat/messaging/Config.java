@@ -4,6 +4,7 @@ import dev.rstrickland.chat.messaging.clients.DynamoConversationRepository;
 import dev.rstrickland.chat.messaging.clients.JwksTokenVerifier;
 import dev.rstrickland.chat.messaging.clients.KafkaDeliveryConsumer;
 import dev.rstrickland.chat.messaging.clients.KafkaMessagePublisher;
+import dev.rstrickland.chat.messaging.clients.KafkaNotificationPublisher;
 import dev.rstrickland.chat.messaging.clients.MessageJson;
 import dev.rstrickland.chat.messaging.clients.PresenceConnectionLookup;
 import dev.rstrickland.chat.messaging.clients.TokenVerifier;
@@ -57,6 +58,7 @@ public final class Config {
     String dynamoEndpoint = System.getenv("DYNAMODB_ENDPOINT");
     String brokers = require("KAFKA_BROKERS");
     String topic = env("TOPIC_MESSAGE_SENT", "message.sent");
+    String notificationTopic = env("TOPIC_NOTIFICATION_TRIGGER", "notification.trigger");
     String jwksUrl = require("COGNITO_JWKS_URL");
     String presenceUrl = require("PRESENCE_SERVICE_URL");
     String presenceKey = require("PRESENCE_INTERNAL_API_KEY");
@@ -87,8 +89,10 @@ public final class Config {
     var lookup = new PresenceConnectionLookup(presenceUrl, presenceKey);
     var pusher = new WsShimConnectionPusher(wsEndpoint, wsManagePath);
 
+    var notificationPublisher = new KafkaNotificationPublisher(producer, notificationTopic);
+
     var messaging = new MessagingService(repository, publisher);
-    var delivery = new DeliveryService(repository, lookup, pusher, json::toFrame);
+    var delivery = new DeliveryService(repository, lookup, pusher, notificationPublisher, json::toFrame);
     var deliveryConsumer = new KafkaDeliveryConsumer(brokers, topic, deliveryGroup, delivery);
 
     return new Config(messaging, verifier, deliveryConsumer, port);

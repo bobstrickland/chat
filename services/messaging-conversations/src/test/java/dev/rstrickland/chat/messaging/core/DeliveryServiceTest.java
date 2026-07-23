@@ -54,6 +54,16 @@ class DeliveryServiceTest {
     }
   }
 
+  static final class RecordingNotifier implements NotificationTrigger {
+    final List<String> offline = new ArrayList<>();
+
+    public void offlineRecipient(String recipientId, Message message) {
+      offline.add(recipientId);
+    }
+  }
+
+  private static final NotificationTrigger NO_NOTIFY = (r, m) -> {};
+
   @Test
   void deliversToEveryRecipientConnectionButNotTheSender() {
     var repo = repoWithMembers("c1", List.of("alice", "bob"));
@@ -66,7 +76,7 @@ class DeliveryServiceTest {
               default -> List.of();
             };
     var pusher = new RecordingPusher();
-    var delivery = new DeliveryService(repo, lookup, pusher, m -> "FRAME:" + m.body());
+    var delivery = new DeliveryService(repo, lookup, pusher, NO_NOTIFY, m -> "FRAME:" + m.body());
 
     delivery.deliver(msg("c1", "alice", "hello"));
 
@@ -76,12 +86,27 @@ class DeliveryServiceTest {
   }
 
   @Test
-  void offlineRecipientYieldsNoPushes() {
+  void offlineRecipientYieldsNoPushesButTriggersNotification() {
     var repo = repoWithMembers("c1", List.of("alice", "bob"));
     ConnectionLookup noConnections = userId -> List.of();
     var pusher = new RecordingPusher();
-    new DeliveryService(repo, noConnections, pusher, m -> m.body()).deliver(msg("c1", "alice", "hi"));
-    assertTrue(pusher.pushes.isEmpty());
+    var notifier = new RecordingNotifier();
+    new DeliveryService(repo, noConnections, pusher, notifier, m -> m.body())
+        .deliver(msg("c1", "alice", "hi"));
+
+    assertTrue(pusher.pushes.isEmpty(), "no live socket to push to");
+    assertEquals(List.of("bob"), notifier.offline, "offline recipient handed off to Notification");
+  }
+
+  @Test
+  void onlineRecipientDoesNotTriggerNotification() {
+    var repo = repoWithMembers("c1", List.of("alice", "bob"));
+    ConnectionLookup lookup = userId -> userId.equals("bob") ? List.of("bob-web") : List.of();
+    var notifier = new RecordingNotifier();
+    new DeliveryService(repo, lookup, new RecordingPusher(), notifier, m -> m.body())
+        .deliver(msg("c1", "alice", "hi"));
+
+    assertTrue(notifier.offline.isEmpty(), "online recipient gets a live push, not a notification");
   }
 
   @Test
@@ -90,7 +115,7 @@ class DeliveryServiceTest {
     ConnectionLookup lookup = userId -> userId.equals("bob") ? List.of("d1", "d2") : List.of();
     var pusher = new RecordingPusher();
     pusher.pretendStale = true; // every push reports "gone"
-    var delivery = new DeliveryService(repo, lookup, pusher, m -> m.body());
+    var delivery = new DeliveryService(repo, lookup, pusher, NO_NOTIFY, m -> m.body());
 
     delivery.deliver(msg("c1", "alice", "hi"));
 
@@ -108,7 +133,7 @@ class DeliveryServiceTest {
           counts.computeIfAbsent(connectionId, k -> new AtomicInteger()).incrementAndGet();
           return true;
         };
-    new DeliveryService(repo, lookup, pusher, m -> m.body()).deliver(msg("g1", "alice", "hey all"));
+    new DeliveryService(repo, lookup, pusher, NO_NOTIFY, m -> m.body()).deliver(msg("g1", "alice", "hey all"));
 
     assertFalse(counts.containsKey("alice-conn"), "sender excluded");
     assertEquals(1, counts.get("bob-conn").get());

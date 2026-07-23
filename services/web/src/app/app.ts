@@ -4,6 +4,7 @@ import { TokenStore } from './core/token-store';
 import { AuthService } from './core/auth.service';
 import { PresenceService } from './core/presence.service';
 import { ConversationsService } from './core/conversations.service';
+import { PushService } from './core/push.service';
 
 @Component({
   selector: 'app-root',
@@ -24,6 +25,8 @@ export class App {
   // inbox listener that keeps the unread badge live from any page).
   private readonly presence = inject(PresenceService);
   protected readonly conversations = inject(ConversationsService);
+  // Registers web-push on login (best-effort — see PushService).
+  private readonly push = inject(PushService);
 
   logout(): void {
     this.auth.logout();

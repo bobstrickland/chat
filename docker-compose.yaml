@@ -120,11 +120,15 @@ services:
     ports: ["3004:3000"]
     depends_on: [dynamodb-local, redpanda]
 
-  # notification-service:
-  #   build: ./services/notification
-  #   env_file: .env
-  #   ports: ["3005:3000"]
-  #   depends_on: [dynamodb-local, redpanda]
+  notification-service:
+    build: ./services/notification
+    env_file: .env
+    ports: ["3005:3000"]
+    depends_on: [dynamodb-local, redpanda]
+    # Lets web-push reach a real push endpoint; also handy for local testing
+    # against a host-run capture server (real push services are external anyway).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # media-service:
   #   build: ./services/media

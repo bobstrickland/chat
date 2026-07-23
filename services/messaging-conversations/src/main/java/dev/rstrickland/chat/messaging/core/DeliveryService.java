@@ -18,6 +18,7 @@ public final class DeliveryService {
   private final ConversationRepository repository;
   private final ConnectionLookup connections;
   private final ConnectionPusher pusher;
+  private final NotificationTrigger notificationTrigger;
   private final PayloadWriter payloadWriter;
 
   /** Serializes a Message to the JSON frame pushed to clients. */
@@ -29,10 +30,12 @@ public final class DeliveryService {
       ConversationRepository repository,
       ConnectionLookup connections,
       ConnectionPusher pusher,
+      NotificationTrigger notificationTrigger,
       PayloadWriter payloadWriter) {
     this.repository = repository;
     this.connections = connections;
     this.pusher = pusher;
+    this.notificationTrigger = notificationTrigger;
     this.payloadWriter = payloadWriter;
   }
 
@@ -44,7 +47,14 @@ public final class DeliveryService {
       if (member.equals(message.senderId())) {
         continue; // skip the sender (Phase 4)
       }
-      for (String connectionId : connections.activeConnections(member)) {
+
+      List<String> memberConnections = connections.activeConnections(member);
+      if (memberConnections.isEmpty()) {
+        // Offline: no live socket to push to → hand off to Notification (Phase 5).
+        notificationTrigger.offlineRecipient(member, message);
+        continue;
+      }
+      for (String connectionId : memberConnections) {
         // A stale connection returns false and is simply skipped — do not let
         // one dead socket abort delivery to the member's other devices.
         pusher.push(connectionId, frame);
