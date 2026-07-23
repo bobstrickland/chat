@@ -108,11 +108,11 @@ services:
     ports: ["3002:3000"]
     depends_on: [dynamodb-local]
 
-  # messaging-service:
-  #   build: ./services/messaging-conversations
-  #   env_file: .env
-  #   ports: ["3003:3000"]
-  #   depends_on: [dynamodb-local, redpanda]
+  messaging-service:
+    build: ./services/messaging-conversations
+    env_file: .env
+    ports: ["3003:3000"]
+    depends_on: [dynamodb-local, redpanda, presence-service, ws-shim]
 
   presence-service:
     build: ./services/presence-connection

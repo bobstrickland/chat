@@ -33,6 +33,22 @@ export class TokenStore {
     return this._tokens()?.refreshToken ?? null;
   }
 
+  /**
+   * The signed-in user's id (`sub`), decoded from the access token. Used
+   * client-side only to tell "my" messages from others' — never for
+   * authorization, which is always the server's job from the verified token.
+   */
+  get userId(): string | null {
+    const token = this.accessToken;
+    if (!token) return null;
+    try {
+      const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(payload)).sub ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   set(tokens: Tokens): void {
     this._tokens.set(tokens);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tokens));

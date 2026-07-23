@@ -22,5 +22,10 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/mfa-enroll/mfa-enroll').then((m) => m.MfaEnrollComponent),
   },
+  {
+    path: 'chat',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/chat/chat').then((m) => m.ChatComponent),
+  },
   { path: '**', redirectTo: 'profile' },
 ];
