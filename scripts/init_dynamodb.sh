@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates the 6 application tables against DynamoDB Local.
+# Creates the application tables against DynamoDB Local.
 # Schemas mirror terraform/modules/dynamodb/main.tf exactly — keep both in sync.
 set -euo pipefail
 
@@ -141,7 +141,24 @@ echo "Initializing DynamoDB Local at ${ENDPOINT} (region ${REGION})"
 echo
 
 create_users_table
+create_contacts_table() {
+  local name="contacts-local"
+  if table_exists "$name"; then
+    echo "skip: $name already exists"
+    return
+  fi
+  echo "creating: $name"
+  # PK userId (owner), SK contactId (the user they added). Query PK for a user's
+  # contacts; GetItem(PK,SK) answers "did owner add viewer?" (Phase 11 CONTACTS check).
+  $DDB create-table \
+    --table-name "$name" \
+    --attribute-definitions AttributeName=userId,AttributeType=S AttributeName=contactId,AttributeType=S \
+    --key-schema AttributeName=userId,KeyType=HASH AttributeName=contactId,KeyType=RANGE \
+    --billing-mode PAY_PER_REQUEST
+}
+
 create_profiles_table
+create_contacts_table
 create_conversations_table
 create_presence_connections_table
 create_device_tokens_table

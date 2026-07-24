@@ -5,6 +5,7 @@ import { getProfile } from "../core/getProfile.js";
 import { getMyProfile } from "../core/getMyProfile.js";
 import { updateProfile } from "../core/updateProfile.js";
 import { deleteProfile } from "../core/deleteProfile.js";
+import { addContact, removeContact, listContacts } from "../core/contacts.js";
 
 // Per CLAUDE.md: no reliance on Lambda execution-context reuse for
 // correctness. These module-level values are a warm-start perf bonus only —
@@ -68,6 +69,29 @@ export const handler = async (event) => {
       assertInternal(event);
       const result = await provisionProfile(deps, body);
       return reply(result.created ? 201 : 200, result.profile);
+    }
+
+    // ---- contacts (Phase 11) — self-only, keyed by the caller's token --------
+    if (path === "/contacts") {
+      const claims = await authenticate(event);
+      if (method === "GET") return reply(200, await listContacts(deps, { callerUserId: claims.userId }));
+      if (method === "POST") {
+        return reply(
+          201,
+          await addContact(deps, { callerUserId: claims.userId, contactId: body.contactId })
+        );
+      }
+    }
+    const contactMatch = path.match(/^\/contacts\/([^/]+)$/);
+    if (contactMatch && method === "DELETE") {
+      const claims = await authenticate(event);
+      return reply(
+        200,
+        await removeContact(deps, {
+          callerUserId: claims.userId,
+          contactId: decodeURIComponent(contactMatch[1]),
+        })
+      );
     }
 
     const match = path.match(/^\/profiles\/([^/]+)$/);

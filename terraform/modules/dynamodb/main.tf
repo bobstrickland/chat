@@ -44,6 +44,37 @@ resource "aws_dynamodb_table" "profiles" {
   tags = merge(var.tags, { Service = "profile" })
 }
 
+# Contacts — owned by Profile service (Phase 11)
+# PK userId (owner), SK contactId (user they added). Query PK for a user's
+# contacts; GetItem(PK,SK) answers "did owner add viewer?" for CONTACTS visibility.
+resource "aws_dynamodb_table" "contacts" {
+  name         = "${var.name_prefix}-contacts"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+  range_key    = "contactId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "contactId"
+    type = "S"
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = var.kms_key_arn
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = merge(var.tags, { Service = "profile" })
+}
+
 # Conversations — owned by Messaging & Conversations service
 # Single-table design: SK prefix distinguishes meta / member#{userId} / timestamp#{messageId}
 resource "aws_dynamodb_table" "conversations" {

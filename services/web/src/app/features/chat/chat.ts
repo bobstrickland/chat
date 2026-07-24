@@ -1,10 +1,11 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MessagingService } from '../../core/messaging.service';
-import { ConversationsService } from '../../core/conversations.service';
+import { ConversationsService, ConversationRow } from '../../core/conversations.service';
 import { RealtimeService } from '../../core/realtime.service';
 import { NamesService } from '../../core/names.service';
 import { MediaService } from '../../core/media.service';
+import { ContactsService } from '../../core/contacts.service';
 import { errorMessage } from '../../core/http-error';
 
 /**
@@ -36,7 +37,9 @@ import { errorMessage } from '../../core/http-error';
 
         <ul>
           @for (c of conversations.conversations(); track c.conversationId) {
-            <li [class.active]="c.conversationId === openId()" (click)="open(c.conversationId)">
+            <li [class.active]="c.conversationId === openId()" (click)="open(c.conversationId)"
+                (dblclick)="addFromConversation(c)"
+                [title]="c.type === 'direct' ? 'double-click to add ' + c.title + ' to contacts' : ''">
               <div class="row1">
                 <span class="name">{{ c.type === 'group' ? '# ' : '' }}{{ c.title }}</span>
                 @if (c.unread > 0) { <span class="badge">{{ c.unread }}</span> }
@@ -57,7 +60,8 @@ import { errorMessage } from '../../core/http-error';
               <li [class.mine]="m.mine">
                 <div class="msg">
                   @if (isGroup() && !m.mine) {
-                    <span class="sender">{{ names.displayName(m.senderId) }}</span>
+                    <span class="sender" title="double-click to add to contacts"
+                          (dblclick)="addContact(m.senderId)">{{ names.displayName(m.senderId) }}</span>
                   }
                   @if (m.mediaId) {
                     <div class="media">
@@ -112,6 +116,7 @@ import { errorMessage } from '../../core/http-error';
           <p class="muted placeholder">Select a conversation, or start a new one.</p>
         }
         @if (error()) { <p class="err">{{ error() }}</p> }
+        @if (note()) { <p class="note">{{ note() }}</p> }
         <span class="conn" [class.on]="realtime.connectionState() === 'online'" title="live connection"></span>
       </div>
     </section>
@@ -140,7 +145,8 @@ import { errorMessage } from '../../core/http-error';
       .messages li { display: flex; align-items: flex-end; gap: 0.25rem; }
       .messages li.mine { justify-content: flex-end; }
       .msg { display: flex; flex-direction: column; gap: 0.1rem; max-width: 75%; }
-      .sender { font-size: 0.72rem; font-weight: 600; color: var(--accent); }
+      .sender { font-size: 0.72rem; font-weight: 600; color: var(--accent); cursor: pointer; }
+      .note { color: var(--ok, #2e7d32); font-size: 0.85rem; margin: 0.25rem 0 0; }
       .tick { font-size: 0.7rem; color: var(--muted); }
       .tick.read { color: var(--accent); }
       .bubble { padding: 0.4rem 0.7rem; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); align-self: flex-start; }
@@ -167,6 +173,7 @@ export class ChatComponent {
   protected readonly realtime = inject(RealtimeService);
   protected readonly names = inject(NamesService);
   protected readonly media = inject(MediaService);
+  private readonly contacts = inject(ContactsService);
 
   protected newPeerId = '';
   protected groupName = '';
@@ -175,6 +182,7 @@ export class ChatComponent {
   protected readonly showGroup = signal(false);
   protected readonly uploading = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly note = signal<string | null>(null);
   protected readonly openId = this.messaging.conversationId;
   protected readonly isGroup = computed(() => this.openId()?.startsWith('grp#') ?? false);
 
@@ -225,6 +233,30 @@ export class ChatComponent {
       this.error.set(errorMessage(err));
       this.draft = body;
     }
+  }
+
+  /** Double-clicking a direct conversation adds the peer to contacts (Phase 11). */
+  addFromConversation(c: ConversationRow): void {
+    if (c.type === 'direct' && c.peerId) this.addContact(c.peerId, c.title);
+  }
+
+  /** Double-clicking a group member's name adds them to contacts (Phase 11). */
+  async addContact(userId: string, label?: string): Promise<void> {
+    if (this.contacts.isContact(userId)) {
+      this.flash(`${label ?? 'Already'} in contacts`);
+      return;
+    }
+    try {
+      await this.contacts.add(userId);
+      this.flash(`Added ${label ?? this.names.displayName(userId)} to contacts`);
+    } catch {
+      this.error.set('Could not add contact.');
+    }
+  }
+
+  private flash(message: string): void {
+    this.note.set(message);
+    setTimeout(() => this.note.set(null), 2500);
   }
 
   async onFile(event: Event): Promise<void> {

@@ -9,10 +9,16 @@ Table: `profiles` (PK `userId`) — `profiles-local` under compose. Attributes:
 so the new attributes need no table migration. The avatar photo is uploaded through the
 **Media service** (shrunk ≤1024 like any image); Profile only stores its id.
 
-Visibility gates **search** only in Phase 10 (Profile publishes displayName/phone/tags/
-visibility on `search.index`; the Search indexer keeps only PUBLIC profiles). CONTACTS/
-PRIVATE *view* authorization is Phase 11 — profile reads stay open for now so the chat UI
-can render names/avatars.
+Visibility gates **search** (Phase 10: Profile publishes displayName/phone/tags/visibility on
+`search.index`; the Search indexer keeps only PUBLIC profiles) **and profile views** (Phase 11,
+`core/getProfile.js`): PUBLIC → full to anyone; CONTACTS → full only if the owner added the
+caller; PRIVATE → never full to others. An unauthorized read returns **basic identity**
+(name + avatar, `restricted:true`) rather than 404, so the chat UI keeps rendering people you
+share a conversation with — only the detail fields are gated (`core/basicIdentity.js`).
+
+**Contacts (Phase 11):** Profile also owns the `contacts` table (PK `userId`, SK `contactId`)
+and a self-only API — `GET /contacts`, `POST /contacts {contactId}`, `DELETE /contacts/{id}`.
+`GetItem(owner, viewer)` is the CONTACTS-visibility check.
 
 Source of truth for the base schema is `terraform/modules/dynamodb/main.tf`,
 mirrored by `scripts/init_dynamodb.sh`.

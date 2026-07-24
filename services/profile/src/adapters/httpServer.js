@@ -6,6 +6,7 @@ import { getProfile } from "../core/getProfile.js";
 import { getMyProfile } from "../core/getMyProfile.js";
 import { updateProfile } from "../core/updateProfile.js";
 import { deleteProfile } from "../core/deleteProfile.js";
+import { addContact, removeContact, listContacts } from "../core/contacts.js";
 
 const app = express();
 app.use(express.json());
@@ -111,6 +112,41 @@ app.delete("/profiles/:userId", authenticate, async (req, res) => {
       await deleteProfile(deps, {
         userId: req.params.userId,
         callerUserId: req.claims.userId,
+      })
+    );
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// ---- contacts (Phase 11) ---------------------------------------------------
+// A user's own contact list. Everything here is keyed by the caller's token.
+app.get("/contacts", authenticate, async (req, res) => {
+  try {
+    res.json(await listContacts(deps, { callerUserId: req.claims.userId }));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+app.post("/contacts", authenticate, async (req, res) => {
+  try {
+    const contact = await addContact(deps, {
+      callerUserId: req.claims.userId,
+      contactId: req.body?.contactId,
+    });
+    res.status(201).json(contact);
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+app.delete("/contacts/:contactId", authenticate, async (req, res) => {
+  try {
+    res.json(
+      await removeContact(deps, {
+        callerUserId: req.claims.userId,
+        contactId: req.params.contactId,
       })
     );
   } catch (err) {

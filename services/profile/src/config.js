@@ -1,5 +1,6 @@
 import { createDynamoClient } from "./clients/dynamoClient.js";
 import { createProfileRepository } from "./clients/profileRepository.js";
+import { createContactRepository } from "./clients/contactRepository.js";
 import { createTokenVerifier } from "./clients/jwksVerifier.js";
 import { createSearchIndexPublisher } from "./clients/searchIndexPublisher.js";
 
@@ -16,6 +17,7 @@ export function getDependencies() {
 
   return {
     profileRepository: createProfileRepository(docClient, process.env.PROFILES_TABLE),
+    contactRepository: createContactRepository(docClient, process.env.CONTACTS_TABLE),
     verifyToken: createTokenVerifier(process.env.COGNITO_JWKS_URL),
     searchIndexPublisher: createSearchIndexPublisher({
       brokers: process.env.KAFKA_BROKERS,

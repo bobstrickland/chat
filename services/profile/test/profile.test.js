@@ -17,8 +17,10 @@ import { getProfile } from "../src/core/getProfile.js";
 import { getMyProfile } from "../src/core/getMyProfile.js";
 import { updateProfile } from "../src/core/updateProfile.js";
 import { deleteProfile } from "../src/core/deleteProfile.js";
+import { addContact, removeContact, listContacts } from "../src/core/contacts.js";
 import { createDynamoClient } from "../src/clients/dynamoClient.js";
 import { createProfileRepository } from "../src/clients/profileRepository.js";
+import { createContactRepository } from "../src/clients/contactRepository.js";
 
 /** Minimal stand-in for profileRepository. */
 function fakeRepo(seed = {}) {
@@ -45,6 +47,27 @@ function fakeRepo(seed = {}) {
     },
     async remove({ userId }) {
       rows.delete(userId);
+    },
+  };
+}
+
+/** In-memory contactRepository. `pairs` are [owner, contact] tuples. */
+function fakeContacts(pairs = []) {
+  const set = new Set(pairs.map(([o, c]) => `${o}#${c}`));
+  return {
+    async add({ userId, contactId }) {
+      set.add(`${userId}#${contactId}`);
+    },
+    async remove({ userId, contactId }) {
+      set.delete(`${userId}#${contactId}`);
+    },
+    async isContact({ userId, contactId }) {
+      return set.has(`${userId}#${contactId}`);
+    },
+    async list({ userId }) {
+      return [...set]
+        .filter((k) => k.startsWith(`${userId}#`))
+        .map((k) => ({ contactId: k.split("#")[1], createdAt: "2026-01-01T00:00:00Z" }));
     },
   };
 }
@@ -122,12 +145,51 @@ test("getMyProfile requires a userId", async () => {
 // authorization — the rules that must hold identically on HTTP and Lambda
 // ---------------------------------------------------------------------------
 
-test("any authenticated user may read any profile", async () => {
-  const profileRepository = fakeRepo();
-  await provisionProfile({ profileRepository }, { userId: "owner", email: "o@example.com" });
-
-  const seen = await getProfile({ profileRepository }, { userId: "owner", callerUserId: "someone-else" });
+test("a PUBLIC profile is fully readable by anyone (with bio etc.)", async () => {
+  const profileRepository = fakeRepo({
+    owner: { userId: "owner", displayName: "Owner", bio: "hi", visibility: "PUBLIC" },
+  });
+  const seen = await getProfile(
+    { profileRepository, contactRepository: fakeContacts() },
+    { userId: "owner", callerUserId: "someone-else" },
+  );
   assert.equal(seen.userId, "owner");
+  assert.equal(seen.restricted, false);
+  assert.equal(seen.bio, "hi");
+});
+
+test("a PRIVATE profile hides details from others (basic identity only)", async () => {
+  const profileRepository = fakeRepo({
+    owner: { userId: "owner", displayName: "Owner", bio: "secret", phone: "555", visibility: "PRIVATE" },
+  });
+  const seen = await getProfile(
+    { profileRepository, contactRepository: fakeContacts() },
+    { userId: "owner", callerUserId: "stranger" },
+  );
+  assert.equal(seen.restricted, true);
+  assert.equal(seen.displayName, "Owner", "name still shown for chat rendering");
+  assert.equal(seen.bio, undefined, "detail withheld");
+  assert.equal(seen.phone, undefined, "detail withheld");
+});
+
+test("a CONTACTS profile is full only if the OWNER added the viewer", async () => {
+  const profileRepository = fakeRepo({
+    owner: { userId: "owner", displayName: "Owner", bio: "hey", visibility: "CONTACTS" },
+  });
+  // stranger: owner did NOT add them → restricted
+  const asStranger = await getProfile(
+    { profileRepository, contactRepository: fakeContacts([["owner", "friend"]]) },
+    { userId: "owner", callerUserId: "stranger" },
+  );
+  assert.equal(asStranger.restricted, true);
+  assert.equal(asStranger.bio, undefined);
+  // friend: owner added them → full
+  const asFriend = await getProfile(
+    { profileRepository, contactRepository: fakeContacts([["owner", "friend"]]) },
+    { userId: "owner", callerUserId: "friend" },
+  );
+  assert.equal(asFriend.restricted, false);
+  assert.equal(asFriend.bio, "hey");
 });
 
 test("unauthenticated reads are rejected", async () => {
@@ -135,6 +197,47 @@ test("unauthenticated reads are rejected", async () => {
     () => getProfile({ profileRepository: fakeRepo() }, { userId: "owner", callerUserId: null }),
     /unauthenticated/
   );
+});
+
+// ---------------------------------------------------------------------------
+// contacts (Phase 11)
+// ---------------------------------------------------------------------------
+
+test("addContact stores the pair and returns the target's identity", async () => {
+  const profileRepository = fakeRepo({
+    bob: { userId: "bob", displayName: "Bob", avatarMediaId: "m1", bio: "x" },
+  });
+  const contactRepository = fakeContacts();
+  const added = await addContact({ profileRepository, contactRepository }, { callerUserId: "me", contactId: "bob" });
+  assert.deepEqual(added, { userId: "bob", displayName: "Bob", avatarMediaId: "m1" });
+  assert.equal(await contactRepository.isContact({ userId: "me", contactId: "bob" }), true);
+});
+
+test("addContact rejects self and unknown users", async () => {
+  const deps = { profileRepository: fakeRepo(), contactRepository: fakeContacts() };
+  await assert.rejects(() => addContact(deps, { callerUserId: "me", contactId: "me" }), /yourself/);
+  await assert.rejects(
+    () => addContact(deps, { callerUserId: "me", contactId: "ghost" }),
+    (err) => err.code === "NOT_FOUND",
+  );
+});
+
+test("listContacts enriches each contact with name + avatar", async () => {
+  const profileRepository = fakeRepo({
+    a: { userId: "a", displayName: "Ada", avatarMediaId: "av" },
+  });
+  const contactRepository = fakeContacts([["me", "a"]]);
+  const { contacts } = await listContacts({ profileRepository, contactRepository }, { callerUserId: "me" });
+  assert.equal(contacts.length, 1);
+  assert.equal(contacts[0].displayName, "Ada");
+  assert.equal(contacts[0].avatarMediaId, "av");
+});
+
+test("removeContact deletes the pair", async () => {
+  const contactRepository = fakeContacts([["me", "a"]]);
+  const r = await removeContact({ contactRepository }, { callerUserId: "me", contactId: "a" });
+  assert.equal(r.removed, true);
+  assert.equal(await contactRepository.isContact({ userId: "me", contactId: "a" }), false);
 });
 
 test("a user cannot update another user's profile", async () => {
@@ -307,4 +410,28 @@ test("update refuses to resurrect a deleted profile", opts, async () => {
     (err) => err.name === "ConditionalCheckFailedException"
   );
   assert.equal(await repo.get({ userId }), null, "must not create a partial row");
+});
+
+const contacts = createContactRepository(
+  createDynamoClient({ region: process.env.AWS_REGION, endpoint: process.env.DYNAMODB_ENDPOINT }),
+  process.env.CONTACTS_TABLE ?? "contacts-local"
+);
+
+test("contactRepository add / isContact / list / remove against real DynamoDB", opts, async () => {
+  const me = `it-me-${Date.now()}`;
+  const a = `${me}-a`;
+  const b = `${me}-b`;
+
+  await contacts.add({ userId: me, contactId: a });
+  await contacts.add({ userId: me, contactId: b });
+
+  assert.equal(await contacts.isContact({ userId: me, contactId: a }), true);
+  assert.equal(await contacts.isContact({ userId: me, contactId: "nobody" }), false);
+
+  const list = await contacts.list({ userId: me });
+  assert.deepEqual(list.map((c) => c.contactId).sort(), [a, b].sort());
+
+  await contacts.remove({ userId: me, contactId: a });
+  assert.equal(await contacts.isContact({ userId: me, contactId: a }), false);
+  await contacts.remove({ userId: me, contactId: b });
 });

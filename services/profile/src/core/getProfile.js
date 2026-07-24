@@ -1,12 +1,23 @@
+import { basicIdentity } from "./basicIdentity.js";
+
 /**
- * Any authenticated user may read any profile — a chat app has to render
- * display names and avatars for everyone in a conversation. Profiles
- * therefore contain no private data; anything sensitive stays in Auth.
+ * Read another user's profile, honoring their visibility (Phase 11):
+ *   - PUBLIC   → full profile to anyone authenticated
+ *   - CONTACTS → full profile only if the OWNER has added the caller as a contact
+ *                (owner controls who sees their contacts-only profile)
+ *   - PRIVATE  → never the full profile to others
  *
- * @param {{ profileRepository: object }} deps
+ * When not authorized, we return the BASIC IDENTITY (name + avatar) rather than
+ * 404 — the caller may share a conversation with this user and still needs to
+ * render them. Detail fields (bio/phone/links/tags) are withheld. See
+ * basicIdentity.js for why this split exists.
+ *
+ * (Reading your OWN profile goes through getMyProfile, which never restricts.)
+ *
+ * @param {{ profileRepository: object, contactRepository: object }} deps
  * @param {{ userId: string, callerUserId: string }} input
  */
-export async function getProfile({ profileRepository }, input) {
+export async function getProfile({ profileRepository, contactRepository }, input) {
   if (!input.callerUserId) {
     throw new Error("unauthenticated");
   }
@@ -21,5 +32,14 @@ export async function getProfile({ profileRepository }, input) {
     throw err;
   }
 
-  return profile;
+  const visibility = profile.visibility ?? "PUBLIC";
+  let authorized = visibility === "PUBLIC";
+  if (visibility === "CONTACTS") {
+    authorized = await contactRepository.isContact({
+      userId: input.userId, // owner
+      contactId: input.callerUserId, // did the owner add the caller?
+    });
+  }
+
+  return authorized ? { ...profile, restricted: false } : basicIdentity(profile);
 }

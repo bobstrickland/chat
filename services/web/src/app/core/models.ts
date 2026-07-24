@@ -56,6 +56,17 @@ export interface Profile {
   visibility: Visibility;
   createdAt: string;
   updatedAt: string;
+  // Phase 11: when reading someone else's restricted profile, only basic
+  // identity comes back (name + avatar) and `restricted` is true.
+  restricted?: boolean;
+}
+
+// Phase 11: a contact row — the target's basic identity.
+export interface Contact {
+  userId: string;
+  displayName: string | null;
+  avatarMediaId: string | null;
+  addedAt?: string;
 }
 
 // PATCH /profiles/:id — every field optional; null clears an optional field.

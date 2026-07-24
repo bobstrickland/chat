@@ -1,10 +1,11 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { Subject, debounceTime, distinctUntilChanged, switchMap, catchError, of } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { SearchService, SearchResults } from '../../core/search.service';
 import { MessagingService } from '../../core/messaging.service';
+import { ContactsService } from '../../core/contacts.service';
 import { NamesService } from '../../core/names.service';
 
 /**
@@ -15,7 +16,7 @@ import { NamesService } from '../../core/names.service';
  */
 @Component({
   selector: 'app-search',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   template: `
     <section class="search">
       <h2>Search</h2>
@@ -36,9 +37,15 @@ import { NamesService } from '../../core/names.service';
           <h3>People</h3>
           <ul class="results">
             @for (u of r.users; track u.userId) {
-              <li (click)="openUser(u.userId)">
-                <span class="name">{{ u.displayName || u.userId }}</span>
-                @if (u.bio) { <span class="snippet">{{ u.bio }}</span> }
+              <li class="person">
+                <a class="who" [routerLink]="['/u', u.userId]">
+                  <span class="name">{{ u.displayName || u.userId }}</span>
+                </a>
+                @if (contacts.isContact(u.userId)) {
+                  <span class="added">✓ contact</span>
+                } @else {
+                  <button type="button" class="add" (click)="addContact(u.userId)">+ Add</button>
+                }
               </li>
             }
           </ul>
@@ -70,8 +77,12 @@ import { NamesService } from '../../core/names.service';
       .results { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.15rem; }
       .results li { padding: 0.5rem 0.6rem; border-radius: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 0.1rem; }
       .results li:hover { background: var(--bg); }
+      .results li.person { flex-direction: row; align-items: center; justify-content: space-between; }
+      .who { text-decoration: none; color: inherit; flex: 1; }
       .name { font-weight: 600; font-size: 0.9rem; }
       .snippet { color: var(--muted); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .add { font-size: 0.8rem; padding: 0.2rem 0.55rem; }
+      .added { color: var(--muted); font-size: 0.8rem; }
       .muted { color: var(--muted); }
       .err { color: var(--err, #c0392b); }
     `,
@@ -82,6 +93,7 @@ export class SearchComponent {
   private readonly messaging = inject(MessagingService);
   private readonly router = inject(Router);
   protected readonly names = inject(NamesService);
+  protected readonly contacts = inject(ContactsService);
 
   protected q = '';
   protected readonly queries = new Subject<string>();
@@ -123,8 +135,11 @@ export class SearchComponent {
     this.router.navigate(['/chat']);
   }
 
-  async openUser(userId: string): Promise<void> {
-    await this.messaging.open(this.messaging.directIdWith(userId));
-    this.router.navigate(['/chat']);
+  async addContact(userId: string): Promise<void> {
+    try {
+      await this.contacts.add(userId);
+    } catch {
+      this.error.set('Could not add contact.');
+    }
   }
 }

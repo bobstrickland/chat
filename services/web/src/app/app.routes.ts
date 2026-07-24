@@ -37,5 +37,16 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/search/search').then((m) => m.SearchComponent),
   },
+  {
+    path: 'contacts',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/contacts/contacts').then((m) => m.ContactsComponent),
+  },
+  {
+    path: 'u/:userId',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/user-profile/user-profile').then((m) => m.UserProfileComponent),
+  },
   { path: '**', redirectTo: 'profile' },
 ];
