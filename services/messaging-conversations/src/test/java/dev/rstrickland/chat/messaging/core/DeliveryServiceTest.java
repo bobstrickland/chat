@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class DeliveryServiceTest {
 
   static Message msg(String conv, String sender, String body) {
-    return new Message(conv, "m-" + body, sender, body, Instant.now());
+    return new Message(conv, "m-" + body, sender, body, Instant.now(), null);
   }
 
   /** Repo that only needs to answer members() for delivery. */

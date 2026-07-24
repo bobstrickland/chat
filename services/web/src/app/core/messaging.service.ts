@@ -10,6 +10,7 @@ export interface ChatMessage {
   senderId: string;
   body: string;
   sentAt: string;
+  mediaId: string | null;
   mine: boolean;
 }
 
@@ -55,6 +56,7 @@ export class MessagingService {
         senderId: String(frame['senderId']),
         body: String(frame['body']),
         sentAt: String(frame['sentAt']),
+        mediaId: (frame['mediaId'] as string | null) ?? null,
       });
       // A new message I can see is a message I've read.
       if (!mine) this.markViewedRead();
@@ -90,13 +92,13 @@ export class MessagingService {
     this.markViewedRead();
   }
 
-  async send(body: string): Promise<(Omit<ChatMessage, 'mine'>) | null> {
+  async send(body: string, mediaId?: string): Promise<(Omit<ChatMessage, 'mine'>) | null> {
     const conversationId = this.conversationId();
-    if (!conversationId || !body.trim()) return null;
+    if (!conversationId || (!body.trim() && !mediaId)) return null;
     const sent = await firstValueFrom(
       this.http.post<Omit<ChatMessage, 'mine'>>(
         `/conversations/${encodeURIComponent(conversationId)}/messages`,
-        { body: body.trim() },
+        { body: body.trim(), mediaId: mediaId ?? null },
       ),
     );
     this.append(sent);

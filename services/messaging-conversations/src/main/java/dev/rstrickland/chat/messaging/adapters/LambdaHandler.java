@@ -107,7 +107,8 @@ public final class LambdaHandler implements RequestHandler<Map<String, Object>, 
         }
         if ("POST".equals(method)) {
           JsonNode body = MAPPER.readTree(String.valueOf(event.getOrDefault("body", "{}")));
-          Message m = config().messaging.sendToConversation(userId, conversationId, textOf(body, "body"));
+          Message m = config().messaging.sendToConversation(
+              userId, conversationId, textOf(body, "body"), textOf(body, "mediaId"));
           return reply(201, messageMap(m));
         }
       }
@@ -170,6 +171,7 @@ public final class LambdaHandler implements RequestHandler<Map<String, Object>, 
     map.put("senderId", m.senderId());
     map.put("body", m.body());
     map.put("sentAt", m.sentAt().toString());
+    map.put("mediaId", m.mediaId());
     return map;
   }
 

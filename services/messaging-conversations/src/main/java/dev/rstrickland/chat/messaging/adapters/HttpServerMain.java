@@ -166,7 +166,8 @@ public final class HttpServerMain {
       } else if ("POST".equals(method)) {
         JsonNode body = MAPPER.readTree(ex.getRequestBody());
         handleGuarded(ex, () -> {
-          Message m = config.messaging.sendToConversation(userId, conversationId, text(body, "body"));
+          Message m = config.messaging.sendToConversation(
+              userId, conversationId, text(body, "body"), text(body, "mediaId"));
           respond(ex, 201, messageMap(m));
         });
       } else {
@@ -242,6 +243,7 @@ public final class HttpServerMain {
     map.put("senderId", m.senderId());
     map.put("body", m.body());
     map.put("sentAt", m.sentAt().toString());
+    map.put("mediaId", m.mediaId());
     return map;
   }
 

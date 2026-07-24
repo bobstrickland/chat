@@ -4,6 +4,7 @@ import { MessagingService } from '../../core/messaging.service';
 import { ConversationsService } from '../../core/conversations.service';
 import { RealtimeService } from '../../core/realtime.service';
 import { NamesService } from '../../core/names.service';
+import { MediaService } from '../../core/media.service';
 import { errorMessage } from '../../core/http-error';
 
 /**
@@ -58,7 +59,36 @@ import { errorMessage } from '../../core/http-error';
                   @if (isGroup() && !m.mine) {
                     <span class="sender">{{ names.displayName(m.senderId) }}</span>
                   }
-                  <span class="bubble">{{ m.body }}</span>
+                  @if (m.mediaId) {
+                    <div class="media">
+                      @if (media.ready(m.mediaId)) {
+                        @switch (media.kind(m.mediaId)) {
+                          @case ('image') {
+                            <a [href]="media.fullUrl(m.mediaId)" target="_blank" rel="noopener">
+                              <img [src]="media.displayUrl(m.mediaId)" alt="attachment" />
+                            </a>
+                          }
+                          @case ('video') {
+                            <video [src]="media.fullUrl(m.mediaId)" [poster]="media.thumbUrl(m.mediaId)"
+                                   controls preload="metadata"></video>
+                          }
+                          @case ('audio') {
+                            <audio [src]="media.fullUrl(m.mediaId)" controls preload="metadata"></audio>
+                          }
+                          @case ('file') {
+                            <a class="filechip" [href]="media.fullUrl(m.mediaId)" target="_blank" rel="noopener">
+                              📎 attachment
+                            </a>
+                          }
+                        }
+                      } @else if (media.failed(m.mediaId)) {
+                        <span class="bubble muted">⚠️ media unavailable</span>
+                      } @else {
+                        <span class="bubble muted">⏳ processing…</span>
+                      }
+                    </div>
+                  }
+                  @if (m.body) { <span class="bubble">{{ m.body }}</span> }
                 </div>
                 @if (m.mine && messaging.statusOf(m); as st) {
                   <span class="tick" [class.read]="st === 'read'" [title]="st">
@@ -71,9 +101,13 @@ import { errorMessage } from '../../core/http-error';
             }
           </ul>
           <form class="composer" (ngSubmit)="send()">
+            <label class="attach" [class.busy]="uploading()" title="Attach image">
+              📎<input type="file" accept="image/*,video/*,audio/*" (change)="onFile($event)" hidden [disabled]="uploading()" />
+            </label>
             <input type="text" [(ngModel)]="draft" name="draft" placeholder="Message…" autocomplete="off" />
             <button type="submit" [disabled]="!draft.trim()">Send</button>
           </form>
+          @if (uploading()) { <p class="hint uploading">Uploading…</p> }
         } @else {
           <p class="muted placeholder">Select a conversation, or start a new one.</p>
         }
@@ -112,8 +146,15 @@ import { errorMessage } from '../../core/http-error';
       .bubble { padding: 0.4rem 0.7rem; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); align-self: flex-start; }
       li.mine .msg { align-items: flex-end; }
       li.mine .bubble { background: var(--accent); color: var(--accent-text); border-color: transparent; }
-      .composer { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
-      .composer input { flex: 1; }
+      .composer { display: flex; gap: 0.5rem; margin-top: 0.75rem; align-items: center; }
+      .composer input[type='text'] { flex: 1; }
+      .attach { cursor: pointer; font-size: 1.1rem; user-select: none; }
+      .attach.busy { opacity: 0.4; cursor: wait; }
+      .media img { max-width: 240px; max-height: 240px; border-radius: 10px; display: block; }
+      .media video { max-width: 260px; max-height: 260px; border-radius: 10px; display: block; }
+      .media audio { max-width: 260px; display: block; }
+      .filechip { display: inline-block; padding: 0.4rem 0.7rem; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); text-decoration: none; }
+      .uploading { margin: 0.25rem 0 0; }
       .muted { color: var(--muted); }
       .conn { position: absolute; top: 0; right: 0; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--muted); }
       .conn.on { background: var(--ok); }
@@ -125,12 +166,14 @@ export class ChatComponent {
   protected readonly conversations = inject(ConversationsService);
   protected readonly realtime = inject(RealtimeService);
   protected readonly names = inject(NamesService);
+  protected readonly media = inject(MediaService);
 
   protected newPeerId = '';
   protected groupName = '';
   protected groupMembers = '';
   protected draft = '';
   protected readonly showGroup = signal(false);
+  protected readonly uploading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly openId = this.messaging.conversationId;
   protected readonly isGroup = computed(() => this.openId()?.startsWith('grp#') ?? false);
@@ -183,4 +226,30 @@ export class ChatComponent {
       this.draft = body;
     }
   }
+
+  async onFile(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // let the same file be re-picked later
+    if (!file || this.uploading()) return;
+    this.uploading.set(true);
+    this.error.set(null);
+    try {
+      const mediaId = await this.media.upload(file);
+      const sent = await this.messaging.send('', mediaId);
+      if (sent) this.conversations.recordOutgoing(sent.conversationId, attachmentLabel(file.type), sent.sentAt);
+    } catch (err) {
+      this.error.set(errorMessage(err));
+    } finally {
+      this.uploading.set(false);
+    }
+  }
+}
+
+/** A short conversation-list preview label for a media message, by content type. */
+function attachmentLabel(contentType: string): string {
+  if (contentType.startsWith('image/')) return '📷 Photo';
+  if (contentType.startsWith('video/')) return '🎥 Video';
+  if (contentType.startsWith('audio/')) return '🎵 Audio';
+  return '📎 Attachment';
 }

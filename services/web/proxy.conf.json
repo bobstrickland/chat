@@ -1,5 +1,5 @@
 {
-  "//": "Dev-only. The Angular dev server proxies API paths to the docker-compose backends, so the browser sees a single same-origin host (no CORS). Mirrors how prod routes dev-auth.* / dev-api.* subdomains — see CLAUDE.md 'AWS Environment'.",
+  "//": "Dev-only. The Angular dev server proxies API paths to the docker-compose backends, so the browser sees a single same-origin host (no CORS). Mirrors how prod routes dev-auth.* / dev-api.* subdomains \u2014 see CLAUDE.md 'AWS Environment'.",
   "/auth": {
     "target": "http://localhost:3001",
     "secure": false,
@@ -32,6 +32,11 @@
   },
   "/push": {
     "target": "http://localhost:3005",
+    "secure": false,
+    "changeOrigin": true
+  },
+  "/media": {
+    "target": "http://localhost:3006",
     "secure": false,
     "changeOrigin": true
   }

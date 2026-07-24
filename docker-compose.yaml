@@ -49,6 +49,8 @@ services:
       # Sourced from the gitignored root .env — this file is public on GitHub.
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      # Allow the browser (localhost:4200) to PUT/GET presigned URLs cross-origin (dev).
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -130,11 +132,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # media-service:
-  #   build: ./services/media
-  #   env_file: .env
-  #   ports: ["3006:3000"]
-  #   depends_on: [dynamodb-local, minio]
+  media-service:
+    build: ./services/media
+    env_file: .env
+    ports: ["3006:3000"]
+    depends_on: [dynamodb-local, minio, redpanda]
 
   # search-service:
   #   build: ./services/search

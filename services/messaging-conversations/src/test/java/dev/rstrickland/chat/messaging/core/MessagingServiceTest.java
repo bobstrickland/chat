@@ -192,25 +192,25 @@ class MessagingServiceTest {
     MessagingService svc = new MessagingService(repo, pub);
     String conv = svc.createGroup("alice", "Team", List.of("bob", "carol"));
 
-    Message m = svc.sendToConversation("bob", conv, "hi team");
+    Message m = svc.sendToConversation("bob", conv, "hi team", null);
     assertEquals(conv, m.conversationId());
     assertEquals(1, pub.published.size());
 
     // A non-member cannot send.
-    assertThrows(IllegalStateException.class, () -> svc.sendToConversation("mallory", conv, "sneak"));
+    assertThrows(IllegalStateException.class, () -> svc.sendToConversation("mallory", conv, "sneak", null));
   }
 
   @Test
   void sendToUnknownGroupIsNotFound() {
     MessagingService svc = new MessagingService(new FakeRepo(), new FakePublisher());
-    assertThrows(IllegalStateException.class, () -> svc.sendToConversation("alice", "grp#missing", "x"));
+    assertThrows(IllegalStateException.class, () -> svc.sendToConversation("alice", "grp#missing", "x", null));
   }
 
   @Test
   void cannotSendToADirectYouAreNotPartOf() {
     MessagingService svc = new MessagingService(new FakeRepo(), new FakePublisher());
     String someoneElsesDm = MessagingService.directConversationId("bob", "carol");
-    assertThrows(IllegalStateException.class, () -> svc.sendToConversation("alice", someoneElsesDm, "x"));
+    assertThrows(IllegalStateException.class, () -> svc.sendToConversation("alice", someoneElsesDm, "x", null));
   }
 
   @Test
@@ -219,7 +219,7 @@ class MessagingServiceTest {
     MessagingService svc = new MessagingService(repo, new FakePublisher());
     svc.sendDirect("alice", "bob", "hi"); // direct
     String group = svc.createGroup("alice", "Team", List.of("bob", "carol"));
-    svc.sendToConversation("alice", group, "hey team"); // group (newer)
+    svc.sendToConversation("alice", group, "hey team", null); // group (newer)
 
     List<ConversationSummary> list = svc.listConversations("alice");
     ConversationSummary top = list.get(0); // group is most recent

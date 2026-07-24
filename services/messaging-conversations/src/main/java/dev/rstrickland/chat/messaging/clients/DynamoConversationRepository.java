@@ -120,18 +120,28 @@ public final class DynamoConversationRepository implements ConversationRepositor
 
   @Override
   public void saveMessage(Message m) {
-    client.putItem(
-        PutItemRequest.builder()
-            .tableName(table)
-            .item(
-                Map.of(
-                    "conversationId", s(m.conversationId()),
-                    "sk", s(MSG_PREFIX + m.sentAt().toString() + "#" + m.messageId()),
-                    "messageId", s(m.messageId()),
-                    "senderId", s(m.senderId()),
-                    "body", s(m.body()),
-                    "sentAt", s(m.sentAt().toString())))
-            .build());
+    java.util.Map<String, AttributeValue> item = new java.util.HashMap<>();
+    item.put("conversationId", s(m.conversationId()));
+    item.put("sk", s(MSG_PREFIX + m.sentAt().toString() + "#" + m.messageId()));
+    item.put("messageId", s(m.messageId()));
+    item.put("senderId", s(m.senderId()));
+    item.put("body", s(m.body()));
+    item.put("sentAt", s(m.sentAt().toString()));
+    if (m.mediaId() != null) {
+      item.put("mediaId", s(m.mediaId()));
+    }
+    client.putItem(PutItemRequest.builder().tableName(table).item(item).build());
+  }
+
+  private static Message toMessage(String conversationId, Map<String, AttributeValue> item) {
+    AttributeValue media = item.get("mediaId");
+    return new Message(
+        conversationId,
+        item.get("messageId").s(),
+        item.get("senderId").s(),
+        item.get("body").s(),
+        Instant.parse(item.get("sentAt").s()),
+        media == null ? null : media.s());
   }
 
   @Override
@@ -147,13 +157,7 @@ public final class DynamoConversationRepository implements ConversationRepositor
                 .build());
     List<Message> messages = new ArrayList<>(resp.items().size());
     for (Map<String, AttributeValue> item : resp.items()) {
-      messages.add(
-          new Message(
-              conversationId,
-              item.get("messageId").s(),
-              item.get("senderId").s(),
-              item.get("body").s(),
-              Instant.parse(item.get("sentAt").s())));
+      messages.add(toMessage(conversationId, item));
     }
     return messages;
   }
@@ -198,13 +202,7 @@ public final class DynamoConversationRepository implements ConversationRepositor
     if (resp.items().isEmpty()) {
       return null;
     }
-    Map<String, AttributeValue> item = resp.items().get(0);
-    return new Message(
-        conversationId,
-        item.get("messageId").s(),
-        item.get("senderId").s(),
-        item.get("body").s(),
-        Instant.parse(item.get("sentAt").s()));
+    return toMessage(conversationId, resp.items().get(0));
   }
 
   private static final String RECEIPT_PREFIX = "rcpt#";

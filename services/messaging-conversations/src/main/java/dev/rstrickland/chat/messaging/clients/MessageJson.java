@@ -30,12 +30,14 @@ public final class MessageJson {
   public Message fromEvent(String json) {
     try {
       JsonNode n = mapper.readTree(json);
+      JsonNode media = n.get("mediaId");
       return new Message(
           n.get("conversationId").asText(),
           n.get("messageId").asText(),
           n.get("senderId").asText(),
           n.get("body").asText(),
-          Instant.parse(n.get("sentAt").asText()));
+          Instant.parse(n.get("sentAt").asText()),
+          media == null || media.isNull() ? null : media.asText());
     } catch (Exception e) {
       throw new RuntimeException("bad message.sent payload: " + json, e);
     }
@@ -47,6 +49,7 @@ public final class MessageJson {
     node.put("senderId", m.senderId());
     node.put("body", m.body());
     node.put("sentAt", m.sentAt().toString());
+    node.put("mediaId", m.mediaId()); // null-safe: emits JSON null
     return node;
   }
 }

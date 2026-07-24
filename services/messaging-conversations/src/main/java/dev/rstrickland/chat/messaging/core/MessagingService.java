@@ -43,7 +43,7 @@ public final class MessagingService {
     if (senderId.equals(recipientId)) {
       throw new IllegalArgumentException("cannot send a message to yourself");
     }
-    return sendToConversation(senderId, directConversationId(senderId, recipientId), body);
+    return sendToConversation(senderId, directConversationId(senderId, recipientId), body, null);
   }
 
   /**
@@ -82,17 +82,25 @@ public final class MessagingService {
    * The subsequent delivery fan-out (DeliveryService) already handles any number
    * of members, so groups need no special delivery path.
    */
-  public Message sendToConversation(String senderId, String conversationId, String body) {
-    if (body == null || body.isBlank()) {
-      throw new IllegalArgumentException("body is required");
+  public Message sendToConversation(String senderId, String conversationId, String body, String mediaId) {
+    boolean hasBody = body != null && !body.isBlank();
+    boolean hasMedia = mediaId != null && !mediaId.isBlank();
+    if (!hasBody && !hasMedia) {
+      throw new IllegalArgumentException("a message needs a body or media");
     }
-    if (body.length() > MAX_BODY) {
+    if (hasBody && body.length() > MAX_BODY) {
       throw new IllegalArgumentException("body exceeds " + MAX_BODY + " characters");
     }
     requireMembership(senderId, conversationId, /* autoCreateDirect= */ true);
 
     Message message =
-        new Message(conversationId, UUID.randomUUID().toString(), senderId, body.strip(), Instant.now());
+        new Message(
+            conversationId,
+            UUID.randomUUID().toString(),
+            senderId,
+            hasBody ? body.strip() : "",
+            Instant.now(),
+            hasMedia ? mediaId : null);
     repository.saveMessage(message);
     publisher.messageSent(message);
     return message;

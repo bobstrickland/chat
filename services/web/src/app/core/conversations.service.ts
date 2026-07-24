@@ -57,10 +57,12 @@ export class ConversationsService {
       const sentAt = String(frame['sentAt']);
       const mine = senderId === this.tokenStore.userId; // a multi-device echo of my own message
 
+      // The frame carries no content type, so an incoming media preview is generic.
+      const preview = String(frame['body'] || '') || (frame['mediaId'] ? '📎 Attachment' : '');
       this.recordActivity({
         conversationId,
         directPeerId: senderId,
-        body: String(frame['body']),
+        body: preview,
         sentAt,
         // Don't count the conversation I'm viewing, nor my own echoes, as unread.
         incrementUnread: conversationId !== this.messaging.conversationId() && !mine,
