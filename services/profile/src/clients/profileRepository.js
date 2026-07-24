@@ -33,8 +33,12 @@ export function createProfileRepository(docClient, tableName) {
       const profile = {
         userId,
         displayName,
-        avatarUrl: null,
+        avatarMediaId: null, // Phase 10: photo avatar (Media id), replaces avatarUrl
         bio: null,
+        phone: null,
+        links: [],
+        tags: [],
+        visibility: "PUBLIC", // discovery-first default (Phase 10) — user can restrict
         createdAt: now,
         updatedAt: now,
       };

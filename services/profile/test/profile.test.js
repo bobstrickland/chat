@@ -207,6 +207,54 @@ test("update allows null to clear an optional field", async () => {
   assert.equal(cleared.bio, null);
 });
 
+test("update accepts the Phase 10 fields and normalizes them", async () => {
+  const profileRepository = fakeRepo();
+  await provisionProfile({ profileRepository }, { userId: "u1", email: "a@example.com" });
+  const updated = await updateProfile(
+    { profileRepository },
+    {
+      userId: "u1",
+      callerUserId: "u1",
+      fields: {
+        avatarMediaId: "media-123",
+        phone: " +1 (555) 123-4567 ",
+        links: ["https://a.example", " ", "https://b.example"], // blank dropped
+        tags: ["  Java  ", "chat"],
+        visibility: "CONTACTS",
+      },
+    },
+  );
+  assert.equal(updated.avatarMediaId, "media-123");
+  assert.equal(updated.phone, "+1 (555) 123-4567");
+  assert.deepEqual(updated.links, ["https://a.example", "https://b.example"]);
+  assert.deepEqual(updated.tags, ["Java", "chat"]);
+  assert.equal(updated.visibility, "CONTACTS");
+});
+
+test("update enforces the Phase 10 limits and formats", async () => {
+  const profileRepository = fakeRepo();
+  await provisionProfile({ profileRepository }, { userId: "u1", email: "a@example.com" });
+  const call = (fields) => updateProfile({ profileRepository }, { userId: "u1", callerUserId: "u1", fields });
+
+  await assert.rejects(() => call({ links: Array(11).fill("https://x.example") }), /at most 10/);
+  await assert.rejects(() => call({ links: ["not-a-url"] }), /http\(s\) URL/);
+  await assert.rejects(() => call({ tags: Array(11).fill("t") }), /at most 10/);
+  await assert.rejects(() => call({ phone: "abc" }), /valid phone/);
+  await assert.rejects(() => call({ visibility: "SECRET" }), /must be one of/);
+});
+
+test("update lets a user clear lists and phone", async () => {
+  const profileRepository = fakeRepo();
+  await provisionProfile({ profileRepository }, { userId: "u1", email: "a@example.com" });
+  await updateProfile({ profileRepository }, { userId: "u1", callerUserId: "u1", fields: { tags: ["x"], phone: "5551212" } });
+  const cleared = await updateProfile(
+    { profileRepository },
+    { userId: "u1", callerUserId: "u1", fields: { tags: null, phone: null } },
+  );
+  assert.deepEqual(cleared.tags, []);
+  assert.equal(cleared.phone, null);
+});
+
 test("updating a missing profile reports NOT_FOUND", async () => {
   await assert.rejects(
     () => updateProfile({ profileRepository: fakeRepo() }, { userId: "ghost", callerUserId: "ghost", fields: { bio: "x" } }),

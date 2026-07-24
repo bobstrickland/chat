@@ -23,8 +23,13 @@ search.index  ──▶ search-index    consumer ──▶ core/indexProfile ─
   Messaging service already publishes to). Media-only messages (blank body) are
   skipped — nothing to full-text search.
 - **Profiles**: the Profile service publishes a generic indexing envelope
-  `{ kind:"profile", userId, displayName, bio }` to the declared `search.index`
-  topic on create/update. Only `kind:"profile"` is understood today.
+  `{ kind:"profile", userId, displayName, phone, tags, visibility }` to the declared
+  `search.index` topic on create/update. Only `kind:"profile"` is understood today.
+  **Visibility (Phase 10):** only **PUBLIC** profiles are kept searchable — a non-PUBLIC
+  profile is *deleted* from the index (so a PUBLIC→PRIVATE flip removes it), which makes
+  "only PUBLIC ever surfaces" true by construction. Searchable fields are display name,
+  **tags**, and **phone** (matched on a digits-only normalization so formatting doesn't
+  matter); bio is not searched. The query also filters `visibility=PUBLIC` as a backstop.
 - Both consumers use **`fromBeginning: true`** (earliest) — the index must be
   *complete*, so a fresh deploy backfills the retained log. Indexing is an
   idempotent upsert (doc id = messageId / userId), so replay never duplicates.

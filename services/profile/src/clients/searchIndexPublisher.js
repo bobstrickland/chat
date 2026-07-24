@@ -35,11 +35,16 @@ export function createSearchIndexPublisher({ brokers, topic }) {
           messages: [
             {
               key: profile.userId,
+              // Searchable fields (Phase 10: displayName, phone, tags) + visibility,
+              // which the Search indexer uses to decide index vs. remove (only
+              // PUBLIC profiles are ever searchable).
               value: JSON.stringify({
                 kind: "profile",
                 userId: profile.userId,
                 displayName: profile.displayName ?? "",
-                bio: profile.bio ?? "",
+                phone: profile.phone ?? "",
+                tags: Array.isArray(profile.tags) ? profile.tags : [],
+                visibility: profile.visibility ?? "PUBLIC",
               }),
             },
           ],

@@ -1,9 +1,20 @@
 # Profile Service
 
-Owns user-facing profile data: display name, avatar, bio. Phase 2.
+Owns user-facing profile data. Phase 2; extended in Phase 10.
 
-Table: `profiles` (PK `userId`) — `profiles-local` under compose.
-Source of truth for the schema is `terraform/modules/dynamodb/main.tf`,
+Table: `profiles` (PK `userId`) — `profiles-local` under compose. Attributes:
+`displayName`, `bio`, and (Phase 10) `avatarMediaId` (photo avatar — a Media-service
+`mediaId`, replacing the old free `avatarUrl`), `phone`, `links` (≤10 URLs), `tags`
+(≤10), `visibility` (`PUBLIC|CONTACTS|PRIVATE`, default PUBLIC). DynamoDB is schemaless,
+so the new attributes need no table migration. The avatar photo is uploaded through the
+**Media service** (shrunk ≤1024 like any image); Profile only stores its id.
+
+Visibility gates **search** only in Phase 10 (Profile publishes displayName/phone/tags/
+visibility on `search.index`; the Search indexer keeps only PUBLIC profiles). CONTACTS/
+PRIVATE *view* authorization is Phase 11 — profile reads stay open for now so the chat UI
+can render names/avatars.
+
+Source of truth for the base schema is `terraform/modules/dynamodb/main.tf`,
 mirrored by `scripts/init_dynamodb.sh`.
 
 ## Language choice: Node.js 22

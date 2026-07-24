@@ -43,11 +43,17 @@ export interface RefreshResult {
   idToken: string;
 }
 
+export type Visibility = 'PUBLIC' | 'CONTACTS' | 'PRIVATE';
+
 export interface Profile {
   userId: string;
   displayName: string;
-  avatarUrl: string | null;
+  avatarMediaId: string | null; // Phase 10: uploaded photo (Media id), replaces avatarUrl
   bio: string | null;
+  phone: string | null;
+  links: string[];
+  tags: string[];
+  visibility: Visibility;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,8 +61,12 @@ export interface Profile {
 // PATCH /profiles/:id — every field optional; null clears an optional field.
 export interface ProfileUpdate {
   displayName?: string;
-  avatarUrl?: string | null;
+  avatarMediaId?: string | null;
   bio?: string | null;
+  phone?: string | null;
+  links?: string[];
+  tags?: string[];
+  visibility?: Visibility;
 }
 
 export interface ApiError {

@@ -9,12 +9,17 @@ function fakeOpenSearch() {
   return {
     messages: [],
     profiles: [],
+    deleted: [],
     lastMessageQuery: null,
     async indexMessage(doc) {
       this.messages.push(doc);
     },
     async indexProfile(doc) {
       this.profiles.push(doc);
+    },
+    async deleteProfile(userId) {
+      this.deleted.push(userId);
+      this.profiles = this.profiles.filter((p) => p.userId !== userId);
     },
     async searchMessages(q, conversationIds) {
       this.lastMessageQuery = { q, conversationIds };
@@ -95,7 +100,31 @@ test("a text message is indexed with a trimmed body", async () => {
 test("only kind=profile events are indexed as profiles", async () => {
   const openSearch = fakeOpenSearch();
   assert.equal((await indexProfile({ openSearch }, { kind: "other", userId: "u" })).indexed, false);
-  const r = await indexProfile({ openSearch }, { kind: "profile", userId: "u", displayName: "Bo" });
+  const r = await indexProfile(
+    { openSearch },
+    { kind: "profile", userId: "u", displayName: "Bo", visibility: "PUBLIC" },
+  );
   assert.equal(r.indexed, true);
   assert.equal(openSearch.profiles[0].userId, "u");
+});
+
+test("a PUBLIC profile is indexed with a digits-only phone for matching", async () => {
+  const openSearch = fakeOpenSearch();
+  await indexProfile(
+    { openSearch },
+    { kind: "profile", userId: "u", phone: "+1 (555) 123-4567", tags: ["java"], visibility: "PUBLIC" },
+  );
+  assert.equal(openSearch.profiles[0].phoneDigits, "15551234567");
+  assert.deepEqual(openSearch.profiles[0].tags, ["java"]);
+});
+
+test("a non-PUBLIC profile is REMOVED from search, never indexed", async () => {
+  const openSearch = fakeOpenSearch();
+  // first make it public, then flip to private
+  await indexProfile({ openSearch }, { kind: "profile", userId: "u", visibility: "PUBLIC" });
+  const r = await indexProfile({ openSearch }, { kind: "profile", userId: "u", visibility: "PRIVATE" });
+  assert.equal(r.indexed, false);
+  assert.equal(r.removed, true);
+  assert.deepEqual(openSearch.deleted, ["u"]);
+  assert.equal(openSearch.profiles.length, 0, "no longer searchable");
 });

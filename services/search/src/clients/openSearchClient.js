@@ -31,17 +31,26 @@ export function createOpenSearchClient({ node, messagesIndex, profilesIndex }) {
       properties: {
         userId: { type: "keyword" },
         displayName: { type: "text", fields: { raw: { type: "keyword" } } },
-        bio: { type: "text" },
+        phone: { type: "keyword" }, // raw, as entered
+        phoneDigits: { type: "keyword" }, // normalized (digits only) for substring match
+        tags: { type: "text", fields: { raw: { type: "keyword" } } },
+        visibility: { type: "keyword" },
       },
     },
   };
 
   async function ensureIndex(name) {
     const exists = await client.indices.exists({ index: name });
-    if (exists.body) return;
-    await client.indices.create({ index: name, body: { mappings: MAPPINGS[name] } });
-    // eslint-disable-next-line no-console
-    console.log(`[search] created index ${name}`);
+    if (!exists.body) {
+      await client.indices.create({ index: name, body: { mappings: MAPPINGS[name] } });
+      // eslint-disable-next-line no-console
+      console.log(`[search] created index ${name}`);
+      return;
+    }
+    // Index already exists (e.g. created by an earlier phase). Adding NEW fields
+    // to a mapping is allowed and idempotent — re-sending existing fields is a
+    // no-op, so this safely evolves the schema (Phase 10 profile fields) in place.
+    await client.indices.putMapping({ index: name, body: MAPPINGS[name] });
   }
 
   return {
@@ -57,6 +66,15 @@ export function createOpenSearchClient({ node, messagesIndex, profilesIndex }) {
 
     async indexProfile(doc) {
       await client.index({ index: profilesIndex, id: doc.userId, body: doc, refresh: true });
+    },
+
+    /** Remove a profile from people-search (used when it stops being PUBLIC). */
+    async deleteProfile(userId) {
+      try {
+        await client.delete({ index: profilesIndex, id: userId, refresh: true });
+      } catch (err) {
+        if (err.meta?.statusCode !== 404) throw err; // already absent is fine
+      }
     },
 
     /**
@@ -82,12 +100,29 @@ export function createOpenSearchClient({ node, messagesIndex, profilesIndex }) {
       return res.body.hits.hits.map((h) => h._source);
     },
 
+    /**
+     * People search over the Phase 10 searchable fields: display name, tags, and
+     * phone. Phone matches on a digits-only normalization so "(555) 123" and
+     * "5551234" line up. `filter visibility=PUBLIC` is belt-and-suspenders — the
+     * indexer already keeps only PUBLIC profiles here — so non-public can never leak.
+     */
     async searchProfiles(q, size) {
+      const digits = q.replace(/\D/g, "");
+      const should = [{ multi_match: { query: q, fields: ["displayName^3", "tags^2"] } }];
+      if (digits.length >= 3) {
+        should.push({ wildcard: { phoneDigits: `*${digits}*` } });
+      }
       const res = await client.search({
         index: profilesIndex,
         body: {
           size,
-          query: { multi_match: { query: q, fields: ["displayName^2", "bio"] } },
+          query: {
+            bool: {
+              should,
+              minimum_should_match: 1,
+              filter: { term: { visibility: "PUBLIC" } },
+            },
+          },
         },
       });
       return res.body.hits.hits.map((h) => h._source);

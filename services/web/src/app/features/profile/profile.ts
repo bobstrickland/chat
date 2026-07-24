@@ -3,17 +3,20 @@ import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { PresencePanelComponent } from '../presence/presence-panel';
 import { ProfileService } from '../../core/profile.service';
+import { MediaService } from '../../core/media.service';
 import { Profile } from '../../core/models';
 import { errorMessage } from '../../core/http-error';
 
+const MAX_TAGS = 10;
+const MAX_LINKS = 10;
+
 /**
- * View and edit the signed-in user's own profile — the Phase 2 web deliverable.
- * Loads via GET /profiles/me and saves edited fields via PATCH.
+ * View and edit the signed-in user's own profile.
  *
- * A 404 here is expected, not exceptional: profile provisioning runs from
- * Auth's postConfirmation trigger, which isn't attached to the Cognito pool
- * yet (see CLAUDE.md), so a freshly-confirmed account may have no profile.
- * We surface that as a distinct, explained state rather than a raw error.
+ * Phase 10 additions: a photo avatar (uploaded through the Media service, so it's
+ * shrunk ≤1024 like any other image), phone, up to 10 external links, up to 10
+ * tags, and a visibility setting (PUBLIC/CONTACTS/PRIVATE) that governs whether
+ * the profile surfaces in people-search.
  */
 @Component({
   selector: 'app-profile',
@@ -27,34 +30,69 @@ import { errorMessage } from '../../core/http-error';
       } @else if (missing()) {
         <p class="err">No profile found for your account.</p>
         <p class="hint">
-          Profiles are provisioned when Auth's <code>postConfirmation</code> trigger fires.
-          That trigger isn't wired to the pool yet, so accounts confirmed manually won't have
-          one. Provision it via <code>POST /internal/profiles</code> (see the Profile service
-          README), then reload.
+          Profiles are provisioned on first visit (or by Auth's <code>postConfirmation</code>
+          trigger). Reload, or provision via <code>POST /internal/profiles</code>.
         </p>
       } @else {
         <form [formGroup]="form" (ngSubmit)="save()">
+          <div class="avatar-row">
+            <div class="avatar">
+              @if (avatarMediaId(); as id) {
+                @if (media.ready(id)) {
+                  <img [src]="media.displayUrl(id)" alt="avatar" />
+                } @else {
+                  <div class="ph">⏳</div>
+                }
+              } @else {
+                <div class="ph">no photo</div>
+              }
+            </div>
+            <div class="avatar-actions">
+              <label class="upload" [class.busy]="avatarBusy()">
+                {{ avatarBusy() ? 'Uploading…' : 'Choose photo' }}
+                <input type="file" accept="image/*" hidden [disabled]="avatarBusy()" (change)="onAvatar($event)" />
+              </label>
+              @if (avatarMediaId()) {
+                <button type="button" class="link" (click)="removeAvatar()">Remove</button>
+              }
+            </div>
+          </div>
+
           <label>
             Display name
             <input type="text" formControlName="displayName" maxlength="64" />
           </label>
           <label>
-            Avatar URL
-            <input type="url" formControlName="avatarUrl" maxlength="512" placeholder="(optional)" />
+            Phone
+            <input type="tel" formControlName="phone" maxlength="32" placeholder="(optional)" />
           </label>
           <label>
             Bio
             <textarea formControlName="bio" maxlength="512" rows="3" placeholder="(optional)"></textarea>
           </label>
+          <label>
+            Tags
+            <input type="text" formControlName="tagsText" placeholder="comma-separated, up to 10" />
+            <small class="hint">e.g. photography, hiking, java</small>
+          </label>
+          <label>
+            Links
+            <textarea formControlName="linksText" rows="3" placeholder="one URL per line, up to 10"></textarea>
+          </label>
+          <label>
+            Visibility
+            <select formControlName="visibility">
+              <option value="PUBLIC">Public — discoverable in search</option>
+              <option value="CONTACTS">Contacts only</option>
+              <option value="PRIVATE">Private</option>
+            </select>
+            <small class="hint">Only <b>Public</b> profiles appear in people-search.</small>
+          </label>
 
-          @if (error()) {
-            <p class="err">{{ error() }}</p>
-          }
-          @if (saved()) {
-            <p class="ok">Saved.</p>
-          }
+          @if (error()) { <p class="err">{{ error() }}</p> }
+          @if (saved()) { <p class="ok">Saved.</p> }
 
-          <button type="submit" [disabled]="form.invalid || form.pristine || saving()">
+          <button type="submit" [disabled]="form.invalid || (form.pristine && !changed()) || saving() || avatarBusy()">
             {{ saving() ? 'Saving…' : 'Save changes' }}
           </button>
         </form>
@@ -70,10 +108,23 @@ import { errorMessage } from '../../core/http-error';
 
     <app-presence-panel />
   `,
+  styles: [
+    `
+      .avatar-row { display: flex; gap: 1rem; align-items: center; margin-bottom: 0.5rem; }
+      .avatar { width: 88px; height: 88px; border-radius: 50%; overflow: hidden; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; flex: none; }
+      .avatar img { width: 100%; height: 100%; object-fit: cover; }
+      .avatar .ph { color: var(--muted); font-size: 0.75rem; text-align: center; }
+      .avatar-actions { display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-start; }
+      .upload { cursor: pointer; padding: 0.4rem 0.7rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; }
+      .upload.busy { opacity: 0.5; cursor: wait; }
+      small.hint { display: block; color: var(--muted); font-size: 0.75rem; margin-top: 0.15rem; }
+    `,
+  ],
 })
 export class ProfileComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly profiles = inject(ProfileService);
+  protected readonly media = inject(MediaService);
 
   readonly loading = signal(true);
   readonly saving = signal(false);
@@ -82,10 +133,19 @@ export class ProfileComponent implements OnInit {
   readonly saved = signal(false);
   readonly profile = signal<Profile | null>(null);
 
+  // Avatar isn't a form control (it's an upload), so track it + a dirty flag
+  // separately, and fold that into the Save button's enabled state.
+  readonly avatarMediaId = signal<string | null>(null);
+  readonly avatarBusy = signal(false);
+  readonly changed = signal(false);
+
   readonly form = this.fb.nonNullable.group({
     displayName: ['', [Validators.required, Validators.maxLength(64)]],
-    avatarUrl: ['', [Validators.maxLength(512)]],
+    phone: ['', [Validators.maxLength(32)]],
     bio: ['', [Validators.maxLength(512)]],
+    tagsText: [''],
+    linksText: [''],
+    visibility: ['PUBLIC' as Profile['visibility'], [Validators.required]],
   });
 
   ngOnInit(): void {
@@ -96,13 +156,35 @@ export class ProfileComponent implements OnInit {
       },
       error: (err) => {
         this.loading.set(false);
-        if (err?.status === 404) {
-          this.missing.set(true);
-        } else {
-          this.error.set(errorMessage(err));
-        }
+        if (err?.status === 404) this.missing.set(true);
+        else this.error.set(errorMessage(err));
       },
     });
+  }
+
+  async onAvatar(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // allow re-picking the same file
+    if (!file) return;
+    this.avatarBusy.set(true);
+    this.error.set(null);
+    this.saved.set(false);
+    try {
+      const mediaId = await this.media.upload(file);
+      this.avatarMediaId.set(mediaId);
+      this.changed.set(true);
+    } catch (err) {
+      this.error.set(errorMessage(err));
+    } finally {
+      this.avatarBusy.set(false);
+    }
+  }
+
+  removeAvatar(): void {
+    this.avatarMediaId.set(null);
+    this.changed.set(true);
+    this.saved.set(false);
   }
 
   save(): void {
@@ -112,14 +194,16 @@ export class ProfileComponent implements OnInit {
     this.error.set(null);
     this.saved.set(false);
 
-    const { displayName, avatarUrl, bio } = this.form.getRawValue();
-    // Empty optional fields are sent as null (clear), not "" — matching the
-    // Profile service's "null clears" contract.
+    const v = this.form.getRawValue();
     this.profiles
       .update(current.userId, {
-        displayName,
-        avatarUrl: avatarUrl.trim() === '' ? null : avatarUrl,
-        bio: bio.trim() === '' ? null : bio,
+        displayName: v.displayName,
+        avatarMediaId: this.avatarMediaId(),
+        bio: blankToNull(v.bio),
+        phone: blankToNull(v.phone),
+        tags: splitList(v.tagsText, /,/, MAX_TAGS),
+        links: splitList(v.linksText, /[\n,]/, MAX_LINKS),
+        visibility: v.visibility,
       })
       .subscribe({
         next: (p) => {
@@ -136,10 +220,31 @@ export class ProfileComponent implements OnInit {
 
   private applyProfile(p: Profile): void {
     this.profile.set(p);
+    this.avatarMediaId.set(p.avatarMediaId ?? null);
+    this.changed.set(false);
     this.form.reset({
       displayName: p.displayName ?? '',
-      avatarUrl: p.avatarUrl ?? '',
+      phone: p.phone ?? '',
       bio: p.bio ?? '',
+      tagsText: (p.tags ?? []).join(', '),
+      linksText: (p.links ?? []).join('\n'),
+      visibility: p.visibility ?? 'PUBLIC',
     });
   }
+}
+
+/** Empty/whitespace → null (clear), matching the Profile service's "null clears". */
+function blankToNull(value: string): string | null {
+  return value.trim() === '' ? null : value.trim();
+}
+
+/** Split, trim, drop blanks, dedupe, cap — for the tags/links free-text inputs. */
+function splitList(text: string, sep: RegExp, max: number): string[] {
+  const seen = new Set<string>();
+  for (const raw of text.split(sep)) {
+    const item = raw.trim();
+    if (item && !seen.has(item)) seen.add(item);
+    if (seen.size >= max) break;
+  }
+  return [...seen];
 }
