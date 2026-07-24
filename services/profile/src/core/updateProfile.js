@@ -11,7 +11,7 @@ const LIMITS = { displayName: 64, avatarUrl: 512, bio: 512 };
  * @param {{ profileRepository: object }} deps
  * @param {{ userId: string, callerUserId: string, fields: object }} input
  */
-export async function updateProfile({ profileRepository }, input) {
+export async function updateProfile({ profileRepository, searchIndexPublisher }, input) {
   if (!input.callerUserId) {
     throw new Error("unauthenticated");
   }
@@ -47,7 +47,10 @@ export async function updateProfile({ profileRepository }, input) {
   }
 
   try {
-    return await profileRepository.update({ userId: input.userId, fields });
+    const updated = await profileRepository.update({ userId: input.userId, fields });
+    // Re-index for people-search (best-effort; never blocks the write result).
+    await searchIndexPublisher?.publishProfile(updated);
+    return updated;
   } catch (err) {
     if (err.name === "ConditionalCheckFailedException") {
       const notFound = new Error("profile not found");

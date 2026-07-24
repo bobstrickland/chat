@@ -32,5 +32,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/chat/chat').then((m) => m.ChatComponent),
   },
+  {
+    path: 'search',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/search/search').then((m) => m.SearchComponent),
+  },
   { path: '**', redirectTo: 'profile' },
 ];

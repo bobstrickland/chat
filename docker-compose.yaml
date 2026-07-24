@@ -58,17 +58,28 @@ services:
       - ./DATA/minio-data:/data
 
   opensearch:
-    image: opensearchproject/opensearch:latest
+    # Pinned (not :latest) — :latest rolled to 3.x, whose entrypoint runs the
+    # security demo installer and requires OPENSEARCH_INITIAL_ADMIN_PASSWORD,
+    # crash-looping on boot. 2.19.x is stable and matches the JS client we use.
+    image: opensearchproject/opensearch:2.19.1
     container_name: opensearch
     environment:
       discovery.type: single-node
-      plugins.security.disabled: "true"
+      # Local-dev only: no TLS, no auth (Search connects over plain http). Both
+      # flags are required on 2.12+ — DISABLE_SECURITY_PLUGIN alone still runs the
+      # demo installer, which is what aborts startup without an admin password.
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports:
       - "9200:9200"
       - "9600:9600"
     volumes:
-      - ./DATA/opensearch-data:/usr/share/opensearch/data
+      # Docker-managed named volume, NOT a host bind mount: OpenSearch runs as
+      # uid 1000 and a root-owned bind-mount dir gives AccessDenied on data/nodes.
+      # A fresh named volume inherits the image's uid-1000 ownership. (The index
+      # is fully rebuildable from Kafka, so this isn't precious data anyway.)
+      - opensearch-data:/usr/share/opensearch/data
 
   localstack:
     image: localstack/localstack:4.4.0
@@ -108,7 +119,7 @@ services:
     build: ./services/profile
     env_file: .env
     ports: ["3002:3000"]
-    depends_on: [dynamodb-local]
+    depends_on: [dynamodb-local, redpanda]
 
   messaging-service:
     build: ./services/messaging-conversations
@@ -138,11 +149,11 @@ services:
     ports: ["3006:3000"]
     depends_on: [dynamodb-local, minio, redpanda]
 
-  # search-service:
-  #   build: ./services/search
-  #   env_file: .env
-  #   ports: ["3007:3000"]
-  #   depends_on: [dynamodb-local, redpanda, opensearch]
+  search-service:
+    build: ./services/search
+    env_file: .env
+    ports: ["3007:3000"]
+    depends_on: [opensearch, redpanda, messaging-service]
 
 volumes:
   dynamodb-data:

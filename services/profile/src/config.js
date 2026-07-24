@@ -1,6 +1,7 @@
 import { createDynamoClient } from "./clients/dynamoClient.js";
 import { createProfileRepository } from "./clients/profileRepository.js";
 import { createTokenVerifier } from "./clients/jwksVerifier.js";
+import { createSearchIndexPublisher } from "./clients/searchIndexPublisher.js";
 
 /**
  * Builds the dependency bundle every core/ function receives. core/ never
@@ -16,6 +17,10 @@ export function getDependencies() {
   return {
     profileRepository: createProfileRepository(docClient, process.env.PROFILES_TABLE),
     verifyToken: createTokenVerifier(process.env.COGNITO_JWKS_URL),
+    searchIndexPublisher: createSearchIndexPublisher({
+      brokers: process.env.KAFKA_BROKERS,
+      topic: process.env.TOPIC_SEARCH_INDEX ?? "search.index",
+    }),
   };
 }
 

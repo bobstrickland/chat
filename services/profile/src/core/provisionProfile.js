@@ -19,13 +19,15 @@ import { defaultDisplayName } from "./displayName.js";
  * @param {{ profileRepository: object }} deps
  * @param {{ userId: string, email?: string, displayName?: string }} input
  */
-export async function provisionProfile({ profileRepository }, input) {
+export async function provisionProfile({ profileRepository, searchIndexPublisher }, input) {
   if (!input.userId) {
     throw new Error("userId is required");
   }
 
-  return profileRepository.createIfAbsent({
+  const result = await profileRepository.createIfAbsent({
     userId: input.userId,
     displayName: input.displayName || defaultDisplayName(input.email),
   });
+  if (result.created) await searchIndexPublisher?.publishProfile(result.profile);
+  return result;
 }

@@ -19,13 +19,16 @@ import { defaultDisplayName } from "./displayName.js";
  * @param {{ profileRepository: object }} deps
  * @param {{ userId: string, email?: string|null }} input
  */
-export async function getMyProfile({ profileRepository }, input) {
+export async function getMyProfile({ profileRepository, searchIndexPublisher }, input) {
   if (!input.userId) {
     throw new Error("userId is required");
   }
-  const { profile } = await profileRepository.createIfAbsent({
+  const { profile, created } = await profileRepository.createIfAbsent({
     userId: input.userId,
     displayName: defaultDisplayName(input.email),
   });
+  // Only index on first creation — getMyProfile runs on every app load, and an
+  // unchanged profile doesn't need re-indexing on each visit.
+  if (created) await searchIndexPublisher?.publishProfile(profile);
   return profile;
 }

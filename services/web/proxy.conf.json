@@ -39,5 +39,10 @@
     "target": "http://localhost:3006",
     "secure": false,
     "changeOrigin": true
+  },
+  "/search": {
+    "target": "http://localhost:3007",
+    "secure": false,
+    "changeOrigin": true
   }
 }
