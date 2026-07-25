@@ -128,6 +128,12 @@ export class ConversationsService {
     return res.conversationId;
   }
 
+  /** Delete a conversation for me only (Phase 12) — drop it from my list. */
+  async deleteConversation(conversationId: string): Promise<void> {
+    await firstValueFrom(this.http.delete(`/conversations/${encodeURIComponent(conversationId)}`));
+    this.conversations.update((list) => list.filter((c) => c.conversationId !== conversationId));
+  }
+
   /** Call after the user sends — delivery excludes the sender, so we self-report. */
   recordOutgoing(conversationId: string, body: string, sentAt: string): void {
     this.recordActivity({

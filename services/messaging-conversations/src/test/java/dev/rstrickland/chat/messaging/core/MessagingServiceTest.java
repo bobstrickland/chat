@@ -96,6 +96,52 @@ class MessagingServiceTest {
       }
       return out;
     }
+
+    // ---- deletions (Phase 12) ----
+    final Map<String, String> deletedAt = new LinkedHashMap<>(); // conv|user -> instant
+    final java.util.Set<String> hidden = new java.util.HashSet<>(); // conv|user|messageId
+
+    @Override
+    public void markConversationDeleted(String conversationId, String userId, String at) {
+      deletedAt.put(conversationId + "|" + userId, at);
+    }
+
+    @Override
+    public String conversationDeletedAt(String conversationId, String userId) {
+      return deletedAt.get(conversationId + "|" + userId);
+    }
+
+    @Override
+    public void hideMessageForUser(String conversationId, String userId, String messageId) {
+      hidden.add(conversationId + "|" + userId + "|" + messageId);
+    }
+
+    @Override
+    public java.util.Set<String> hiddenMessageIds(String conversationId, String userId) {
+      java.util.Set<String> ids = new java.util.HashSet<>();
+      String prefix = conversationId + "|" + userId + "|";
+      for (String k : hidden) {
+        if (k.startsWith(prefix)) {
+          ids.add(k.substring(prefix.length()));
+        }
+      }
+      return ids;
+    }
+
+    @Override
+    public boolean tombstoneMessage(String conversationId, String sentAt, String messageId, String requiredSenderId) {
+      for (int i = 0; i < messages.size(); i++) {
+        Message m = messages.get(i);
+        if (m.conversationId().equals(conversationId) && m.messageId().equals(messageId)) {
+          if (!m.senderId().equals(requiredSenderId)) {
+            return false; // not the owner
+          }
+          messages.set(i, new Message(conversationId, messageId, m.senderId(), "", m.sentAt(), null, true));
+          return true;
+        }
+      }
+      return false; // not found
+    }
   }
 
   static final class FakePublisher implements MessageEventPublisher {
@@ -257,6 +303,62 @@ class MessagingServiceTest {
     String conv = svc.createGroup("alice", "Team", List.of("bob"));
     assertThrows(IllegalArgumentException.class, () -> svc.recordReceipt("bob", conv, "seen", "2026-01-01T00:00:00Z"));
     assertThrows(IllegalStateException.class, () -> svc.recordReceipt("mallory", conv, "read", "2026-01-01T00:00:00Z"));
+  }
+
+  // ---- deletions (Phase 12) ----
+
+  @Test
+  void deleteConversationHidesItUntilNewerActivity() {
+    FakeRepo repo = new FakeRepo();
+    MessagingService svc = new MessagingService(repo, new FakePublisher());
+    Message m = svc.sendDirect("alice", "bob", "hi");
+    String conv = m.conversationId();
+
+    svc.deleteConversationForUser("alice", conv);
+    assertTrue(svc.listConversations("alice").isEmpty(), "hidden after delete");
+    assertEquals(1, svc.listConversations("bob").size(), "only hidden for the deleter");
+    assertTrue(svc.conversationHistory("alice", conv, 100).isEmpty(), "old messages cleared for alice");
+
+    // A newer message re-surfaces it for alice, and only that message shows.
+    svc.sendDirect("bob", "alice", "you there?");
+    assertEquals(1, svc.listConversations("alice").size(), "reappears on newer activity");
+    List<Message> hist = svc.conversationHistory("alice", conv, 100);
+    assertEquals(1, hist.size());
+    assertEquals("you there?", hist.get(0).body());
+  }
+
+  @Test
+  void hideMessageForMeDropsItFromMyHistoryOnly() {
+    FakeRepo repo = new FakeRepo();
+    MessagingService svc = new MessagingService(repo, new FakePublisher());
+    Message m = svc.sendDirect("alice", "bob", "secret");
+    String conv = m.conversationId();
+
+    svc.hideMessageForUser("bob", conv, m.messageId());
+    assertTrue(svc.conversationHistory("bob", conv, 100).isEmpty(), "hidden for bob");
+    assertEquals(1, svc.conversationHistory("alice", conv, 100).size(), "still there for alice");
+  }
+
+  @Test
+  void deleteForEveryoneTombstonesOnlyForTheSender() {
+    FakeRepo repo = new FakeRepo();
+    MessagingService svc = new MessagingService(repo, new FakePublisher());
+    Message m = svc.sendDirect("alice", "bob", "oops");
+    String conv = m.conversationId();
+
+    // Bob (not the sender) cannot delete-for-everyone.
+    assertThrows(
+        IllegalStateException.class,
+        () -> svc.deleteMessageForEveryone("bob", conv, m.sentAt().toString(), m.messageId()));
+
+    // Alice (the sender) can — returns members for the broadcast.
+    List<String> members = svc.deleteMessageForEveryone("alice", conv, m.sentAt().toString(), m.messageId());
+    assertTrue(members.contains("alice") && members.contains("bob"));
+
+    // The tombstone is visible to everyone: kept, but deleted + body cleared.
+    Message tomb = svc.conversationHistory("bob", conv, 100).get(0);
+    assertTrue(tomb.deleted());
+    assertEquals("", tomb.body());
   }
 
   @Test

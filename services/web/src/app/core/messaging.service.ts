@@ -11,6 +11,7 @@ export interface ChatMessage {
   body: string;
   sentAt: string;
   mediaId: string | null;
+  deleted?: boolean; // Phase 12: deleted-for-everyone tombstone
   mine: boolean;
 }
 
@@ -66,6 +67,12 @@ export class MessagingService {
       if (frame['conversationId'] !== this.conversationId()) return;
       if (String(frame['userId']) === this.tokenStore.userId) return; // my own receipt
       this.applyPeerReceipt(String(frame['kind']), String(frame['position']));
+    });
+
+    // Phase 12: a message was deleted for everyone — tombstone it live.
+    this.realtime.on('message-deleted').subscribe((frame) => {
+      if (frame['conversationId'] !== this.conversationId()) return;
+      this.applyTombstone(String(frame['messageId']));
     });
   }
 
@@ -142,6 +149,35 @@ export class MessagingService {
     this.http
       .post(`/conversations/${encodeURIComponent(id)}/receipts`, { kind: 'read', position: latest })
       .subscribe({ error: () => {} });
+  }
+
+  /**
+   * Delete a message (Phase 12).
+   *   - scope 'everyone' (own messages only): tombstones it for all users; the
+   *     server broadcasts, but we tombstone locally too for immediacy.
+   *   - scope 'me': hides it from my view only; drop it from the local list.
+   */
+  async deleteMessage(m: ChatMessage, scope: 'everyone' | 'me'): Promise<void> {
+    const id = this.conversationId();
+    if (!id) return;
+    const params = new URLSearchParams({ scope });
+    if (scope === 'everyone') params.set('sentAt', m.sentAt);
+    await firstValueFrom(
+      this.http.delete(
+        `/conversations/${encodeURIComponent(id)}/messages/${encodeURIComponent(m.messageId)}?${params}`,
+      ),
+    );
+    if (scope === 'everyone') this.applyTombstone(m.messageId);
+    else this.messages.update((list) => list.filter((x) => x.messageId !== m.messageId));
+  }
+
+  /** Replace a message with its deleted-for-everyone tombstone in the open view. */
+  private applyTombstone(messageId: string): void {
+    this.messages.update((list) =>
+      list.map((m) =>
+        m.messageId === messageId ? { ...m, deleted: true, body: '', mediaId: null } : m,
+      ),
+    );
   }
 
   private decorate(m: Omit<ChatMessage, 'mine'>): ChatMessage {

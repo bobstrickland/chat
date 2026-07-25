@@ -106,10 +106,63 @@ public final class MessagingService {
     return message;
   }
 
-  /** History of any conversation the caller is a member of. */
+  /**
+   * History of any conversation the caller is a member of, with the caller's own
+   * deletions applied (Phase 12): messages they hid for themselves are dropped, and
+   * anything sent at/before they last cleared the chat is hidden. Messages deleted
+   * for everyone stay as tombstones (deleted=true, empty body).
+   */
   public List<Message> conversationHistory(String userId, String conversationId, int limit) {
     requireMembership(userId, conversationId, /* autoCreateDirect= */ false);
-    return repository.listMessages(conversationId, limit);
+    List<Message> all = repository.listMessages(conversationId, limit);
+    String deletedAtStr = repository.conversationDeletedAt(conversationId, userId);
+    Instant deletedAt = deletedAtStr == null ? null : Instant.parse(deletedAtStr);
+    java.util.Set<String> hidden = repository.hiddenMessageIds(conversationId, userId);
+
+    List<Message> visible = new ArrayList<>(all.size());
+    for (Message m : all) {
+      if (hidden.contains(m.messageId())) {
+        continue; // deleted-for-me
+      }
+      if (deletedAt != null && !m.sentAt().isAfter(deletedAt)) {
+        continue; // sent before I cleared this chat
+      }
+      visible.add(m);
+    }
+    return visible;
+  }
+
+  /** Per-user "delete this chat" — hides it from the caller's list/history only. */
+  public void deleteConversationForUser(String userId, String conversationId) {
+    requireMembership(userId, conversationId, /* autoCreateDirect= */ false);
+    repository.markConversationDeleted(conversationId, userId, Instant.now().toString());
+  }
+
+  /** Per-user "delete for me" — hides one message from the caller only. */
+  public void hideMessageForUser(String userId, String conversationId, String messageId) {
+    requireMembership(userId, conversationId, /* autoCreateDirect= */ false);
+    if (messageId == null || messageId.isBlank()) {
+      throw new IllegalArgumentException("messageId is required");
+    }
+    repository.hideMessageForUser(conversationId, userId, messageId);
+  }
+
+  /**
+   * Delete-for-everyone — only the sender may do this. Tombstones the message
+   * (clears body/media) for ALL users and returns the members so the adapter can
+   * broadcast the removal to their live connections. Non-owners get a 403.
+   */
+  public List<String> deleteMessageForEveryone(
+      String userId, String conversationId, String sentAt, String messageId) {
+    requireMembership(userId, conversationId, /* autoCreateDirect= */ false);
+    if (sentAt == null || sentAt.isBlank() || messageId == null || messageId.isBlank()) {
+      throw new IllegalArgumentException("sentAt and messageId are required");
+    }
+    boolean deleted = repository.tombstoneMessage(conversationId, sentAt, messageId, userId);
+    if (!deleted) {
+      throw new IllegalStateException("you can only delete your own messages");
+    }
+    return repository.members(conversationId);
   }
 
   /** Current receipt positions (delivered/read, per user) for a conversation. */
@@ -183,6 +236,15 @@ public final class MessagingService {
     List<ConversationSummary> out = new ArrayList<>();
     for (String conversationId : repository.userConversations(userId)) {
       Message last = repository.lastMessage(conversationId);
+      // Per-user delete (Phase 12): stay hidden until there's activity NEWER than
+      // when the caller cleared it — a fresh message re-surfaces the conversation.
+      String deletedAtStr = repository.conversationDeletedAt(conversationId, userId);
+      if (deletedAtStr != null) {
+        Instant deletedAt = Instant.parse(deletedAtStr);
+        if (last == null || !last.sentAt().isAfter(deletedAt)) {
+          continue;
+        }
+      }
       if (conversationId.startsWith("grp#")) {
         // Group: read meta for the name (directs skip this query — peer comes
         // straight from the id).

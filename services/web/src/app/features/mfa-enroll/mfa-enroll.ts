@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { AuthService } from '../../core/auth.service';
+import { TokenStore } from '../../core/token-store';
 import { errorMessage } from '../../core/http-error';
 
 /**
@@ -15,7 +16,13 @@ import { errorMessage } from '../../core/http-error';
     <section class="card">
       <h1>Enable two-factor auth</h1>
 
-      @if (done()) {
+      @if (!tokenStore.canManageMfa()) {
+        <p class="hint">
+          You're signed in through an external provider (e.g. Google), which manages your
+          two-factor authentication. App-based 2FA here is only available for accounts that sign
+          in with an email and password.
+        </p>
+      } @else if (done()) {
         <p class="ok">Two-factor authentication is now enabled for your account.</p>
         <p class="hint">You'll be asked for a code from your authenticator next time you sign in.</p>
       } @else if (secret()) {
@@ -59,6 +66,7 @@ import { errorMessage } from '../../core/http-error';
 export class MfaEnrollComponent {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
+  protected readonly tokenStore = inject(TokenStore);
 
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);

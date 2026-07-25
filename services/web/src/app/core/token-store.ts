@@ -3,6 +3,23 @@ import { Tokens } from './models';
 
 const STORAGE_KEY = 'chat.tokens';
 
+interface JwtClaims {
+  sub?: string;
+  scope?: string;
+  [claim: string]: unknown;
+}
+
+/** Decode a JWT payload (base64url) into claims — client-side reads only, never trusted for auth. */
+function decodeJwt(token: string | null | undefined): JwtClaims | null {
+  if (!token) return null;
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(payload)) as JwtClaims;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Holds the session's tokens and persists them to localStorage so a page
  * reload keeps you logged in.
@@ -25,6 +42,22 @@ export class TokenStore {
   readonly tokens = this._tokens.asReadonly();
   readonly isAuthenticated = computed(() => this._tokens() !== null);
 
+  /**
+   * Whether this session can self-manage TOTP MFA. Cognito's
+   * AssociateSoftwareToken/SetUserMFAPreference require the access token to
+   * carry the `aws.cognito.signin.user.admin` scope, which only email/password
+   * (USER_PASSWORD_AUTH) logins get. Federated (Google) logins go through the
+   * Hosted UI and carry only `openid/profile/email`, so TOTP self-enrollment
+   * isn't available to them (and Cognito MFA wouldn't gate a Google sign-in
+   * anyway). The nav + 2FA screen use this to hide/explain rather than 500.
+   */
+  readonly canManageMfa = computed(() => {
+    const claims = decodeJwt(this._tokens()?.accessToken);
+    return String(claims?.scope ?? '')
+      .split(' ')
+      .includes('aws.cognito.signin.user.admin');
+  });
+
   get accessToken(): string | null {
     return this._tokens()?.accessToken ?? null;
   }
@@ -39,14 +72,7 @@ export class TokenStore {
    * authorization, which is always the server's job from the verified token.
    */
   get userId(): string | null {
-    const token = this.accessToken;
-    if (!token) return null;
-    try {
-      const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      return JSON.parse(atob(payload)).sub ?? null;
-    } catch {
-      return null;
-    }
+    return decodeJwt(this.accessToken)?.sub ?? null;
   }
 
   set(tokens: Tokens): void {

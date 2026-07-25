@@ -9,6 +9,7 @@ import dev.rstrickland.chat.messaging.clients.MessageJson;
 import dev.rstrickland.chat.messaging.clients.PresenceConnectionLookup;
 import dev.rstrickland.chat.messaging.clients.ReceiptJson;
 import dev.rstrickland.chat.messaging.core.ReceiptBroadcaster;
+import dev.rstrickland.chat.messaging.core.DeletionBroadcaster;
 import dev.rstrickland.chat.messaging.clients.TokenVerifier;
 import dev.rstrickland.chat.messaging.clients.WsShimConnectionPusher;
 import dev.rstrickland.chat.messaging.core.DeliveryService;
@@ -29,6 +30,7 @@ public final class Config {
   public final TokenVerifier verifier;
   public final KafkaDeliveryConsumer deliveryConsumer;
   public final ReceiptBroadcaster receiptBroadcaster;
+  public final DeletionBroadcaster deletionBroadcaster;
   public final int port;
 
   private Config(
@@ -36,11 +38,13 @@ public final class Config {
       TokenVerifier verifier,
       KafkaDeliveryConsumer deliveryConsumer,
       ReceiptBroadcaster receiptBroadcaster,
+      DeletionBroadcaster deletionBroadcaster,
       int port) {
     this.messaging = messaging;
     this.verifier = verifier;
     this.deliveryConsumer = deliveryConsumer;
     this.receiptBroadcaster = receiptBroadcaster;
+    this.deletionBroadcaster = deletionBroadcaster;
     this.port = port;
   }
 
@@ -102,7 +106,9 @@ public final class Config {
 
     ReceiptJson receiptJson = new ReceiptJson();
     var receiptBroadcaster = new ReceiptBroadcaster(lookup, pusher, receiptJson::toFrame);
+    var deletionBroadcaster = new DeletionBroadcaster(lookup, pusher, json::toDeletedFrame);
 
-    return new Config(messaging, verifier, deliveryConsumer, receiptBroadcaster, port);
+    return new Config(
+        messaging, verifier, deliveryConsumer, receiptBroadcaster, deletionBroadcaster, port);
   }
 }

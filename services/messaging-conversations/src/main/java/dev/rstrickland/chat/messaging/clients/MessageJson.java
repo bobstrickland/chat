@@ -27,6 +27,15 @@ public final class MessageJson {
     return fields(node, m).toString();
   }
 
+  /** The frame pushed when a message is deleted-for-everyone (Phase 12). */
+  public String toDeletedFrame(String conversationId, String messageId) {
+    ObjectNode node = mapper.createObjectNode();
+    node.put("type", "message-deleted");
+    node.put("conversationId", conversationId);
+    node.put("messageId", messageId);
+    return node.toString();
+  }
+
   public Message fromEvent(String json) {
     try {
       JsonNode n = mapper.readTree(json);

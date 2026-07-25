@@ -151,12 +151,49 @@ public final class HttpServerMain {
           config.messaging.directHistory(userId, peerId, 200)));
       return;
     }
-    if (parts.length != 2) {
+    if (parts.length < 1 || parts.length > 3) {
       respond(ex, 404, Map.of("error", "not found"));
       return;
     }
     String conversationId = URLDecoder.decode(parts[0], StandardCharsets.UTF_8);
     String method = ex.getRequestMethod();
+
+    // DELETE /conversations/{conversationId} — delete this chat for me (Phase 12)
+    if (parts.length == 1) {
+      if ("DELETE".equals(method)) {
+        handleGuarded(ex, () -> {
+          config.messaging.deleteConversationForUser(userId, conversationId);
+          respond(ex, 200, Map.of("ok", true));
+        });
+      } else {
+        respond(ex, 405, Map.of("error", "method not allowed"));
+      }
+      return;
+    }
+
+    // DELETE /conversations/{conversationId}/messages/{messageId} (Phase 12)
+    //   ?scope=me       → hide for me only (default)
+    //   ?scope=everyone → delete for everyone (sender only); needs ?sentAt=
+    if (parts.length == 3 && parts[1].equals("messages") && "DELETE".equals(method)) {
+      String messageId = URLDecoder.decode(parts[2], StandardCharsets.UTF_8);
+      Map<String, String> q = queryParams(ex);
+      handleGuarded(ex, () -> {
+        if ("everyone".equals(q.get("scope"))) {
+          List<String> members = config.messaging.deleteMessageForEveryone(
+              userId, conversationId, q.get("sentAt"), messageId);
+          config.deletionBroadcaster.broadcast(conversationId, messageId, members);
+        } else {
+          config.messaging.hideMessageForUser(userId, conversationId, messageId);
+        }
+        respond(ex, 200, Map.of("ok", true));
+      });
+      return;
+    }
+
+    if (parts.length != 2) {
+      respond(ex, 404, Map.of("error", "not found"));
+      return;
+    }
 
     // /conversations/{conversationId}/messages
     if (parts[1].equals("messages")) {
@@ -244,12 +281,32 @@ public final class HttpServerMain {
     map.put("body", m.body());
     map.put("sentAt", m.sentAt().toString());
     map.put("mediaId", m.mediaId());
+    map.put("deleted", m.deleted());
     return map;
   }
 
   private static String text(JsonNode node, String field) {
     JsonNode v = node.get(field);
     return v == null || v.isNull() ? null : v.asText();
+  }
+
+  /** Parse the request query string (`a=1&b=2`) into a map, URL-decoding values. */
+  private static Map<String, String> queryParams(HttpExchange ex) {
+    Map<String, String> out = new java.util.HashMap<>();
+    String query = ex.getRequestURI().getRawQuery();
+    if (query == null || query.isBlank()) {
+      return out;
+    }
+    for (String pair : query.split("&")) {
+      int eq = pair.indexOf('=');
+      if (eq < 0) {
+        continue;
+      }
+      out.put(
+          URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8),
+          URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8));
+    }
+    return out;
   }
 
   private static void respond(HttpExchange ex, int status, Object body) throws IOException {

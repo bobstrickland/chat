@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MessagingService } from '../../core/messaging.service';
+import { MessagingService, ChatMessage } from '../../core/messaging.service';
 import { ConversationsService, ConversationRow } from '../../core/conversations.service';
 import { RealtimeService } from '../../core/realtime.service';
 import { NamesService } from '../../core/names.service';
@@ -42,7 +42,11 @@ import { errorMessage } from '../../core/http-error';
                 [title]="c.type === 'direct' ? 'double-click to add ' + c.title + ' to contacts' : ''">
               <div class="row1">
                 <span class="name">{{ c.type === 'group' ? '# ' : '' }}{{ c.title }}</span>
-                @if (c.unread > 0) { <span class="badge">{{ c.unread }}</span> }
+                <span class="rowend">
+                  @if (c.unread > 0) { <span class="badge">{{ c.unread }}</span> }
+                  <button type="button" class="convdel" (click)="deleteConversation(c, $event)"
+                          title="Delete chat for me">×</button>
+                </span>
               </div>
               <div class="preview">{{ c.lastBody ?? '—' }}</div>
             </li>
@@ -63,6 +67,9 @@ import { errorMessage } from '../../core/http-error';
                     <span class="sender" title="double-click to add to contacts"
                           (dblclick)="addContact(m.senderId)">{{ names.displayName(m.senderId) }}</span>
                   }
+                  @if (m.deleted) {
+                    <span class="bubble muted deleted">🚫 message deleted</span>
+                  } @else {
                   @if (m.mediaId) {
                     <div class="media">
                       @if (media.ready(m.mediaId)) {
@@ -93,7 +100,12 @@ import { errorMessage } from '../../core/http-error';
                     </div>
                   }
                   @if (m.body) { <span class="bubble">{{ m.body }}</span> }
+                  }
                 </div>
+                @if (!m.deleted) {
+                  <button type="button" class="del" (click)="deleteMessage(m)"
+                          [title]="m.mine ? 'Delete for everyone' : 'Delete for me'">🗑</button>
+                }
                 @if (m.mine && messaging.statusOf(m); as st) {
                   <span class="tick" [class.read]="st === 'read'" [title]="st">
                     {{ st === 'sent' ? '✓' : '✓✓' }}
@@ -104,11 +116,11 @@ import { errorMessage } from '../../core/http-error';
               <li class="muted">No messages yet — say hello.</li>
             }
           </ul>
-          <form class="composer" (ngSubmit)="send()">
+          <form class="composer" (ngSubmit)="send()" >
             <label class="attach" [class.busy]="uploading()" title="Attach image">
               📎<input type="file" accept="image/*,video/*,audio/*" (change)="onFile($event)" hidden [disabled]="uploading()" />
             </label>
-            <input type="text" [(ngModel)]="draft" name="draft" placeholder="Message…" autocomplete="off" />
+            <input type="text"  [(ngModel)]="draft" name="draft" placeholder="Message…" autocomplete="off" style="margin: 0px 8px;" />
             <button type="submit" [disabled]="!draft.trim()">Send</button>
           </form>
           @if (uploading()) { <p class="hint uploading">Uploading…</p> }
@@ -147,14 +159,22 @@ import { errorMessage } from '../../core/http-error';
       .msg { display: flex; flex-direction: column; gap: 0.1rem; max-width: 75%; }
       .sender { font-size: 0.72rem; font-weight: 600; color: var(--accent); cursor: pointer; }
       .note { color: var(--ok, #2e7d32); font-size: 0.85rem; margin: 0.25rem 0 0; }
+      .deleted { font-style: italic; }
+      .row1 { gap: 0.3rem; }
+      .rowend { display: flex; align-items: center; gap: 0.3rem; }
+      .convdel { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0.15rem; opacity: 0; }
+      .list li:hover .convdel { opacity: 1; }
+      .del { border: none; background: none; cursor: pointer; font-size: 0.8rem; padding: 0; opacity: 0; align-self: center; }
+      .messages li:hover .del { opacity: 0.6; }
+      .del:hover { opacity: 1; }
       .tick { font-size: 0.7rem; color: var(--muted); }
       .tick.read { color: var(--accent); }
       .bubble { padding: 0.4rem 0.7rem; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); align-self: flex-start; }
       li.mine .msg { align-items: flex-end; }
       li.mine .bubble { background: var(--accent); color: var(--accent-text); border-color: transparent; }
-      .composer { display: flex; gap: 0.5rem; margin-top: 0.75rem; align-items: center; }
+      .composer { display: block; gap: 0.5rem; margin-top: 0.75rem; align-items: center; }
       .composer input[type='text'] { flex: 1; }
-      .attach { cursor: pointer; font-size: 1.1rem; user-select: none; }
+      .attach { cursor: pointer; font-size: 1.1rem; user-select: none; display: inline-flex; }
       .attach.busy { opacity: 0.4; cursor: wait; }
       .media img { max-width: 240px; max-height: 240px; border-radius: 10px; display: block; }
       .media video { max-width: 260px; max-height: 260px; border-radius: 10px; display: block; }
@@ -233,6 +253,34 @@ export class ChatComponent {
       this.error.set(errorMessage(err));
       this.draft = body;
     }
+  }
+
+  /** Delete a message (Phase 12): mine → for everyone, others' → for me. Confirms first. */
+  async deleteMessage(m: ChatMessage): Promise<void> {
+    const everyone = m.mine;
+    const prompt = everyone
+      ? 'Delete this message for everyone? This cannot be undone.'
+      : 'Delete this message for you only?';
+    if (!confirm(prompt)) return;
+    try {
+      await this.messaging.deleteMessage(m, everyone ? 'everyone' : 'me');
+    } catch {
+      this.error.set('Could not delete message.');
+    }
+  }
+
+  /** Delete a conversation for me only (Phase 12). Confirms; closes it if open. */
+  deleteConversation(c: ConversationRow, event: Event): void {
+    event.stopPropagation(); // don't also open the conversation
+    const label = c.type === 'direct' ? ` with ${c.title}` : ` "${c.title}"`;
+    if (!confirm(`Delete this chat${label}? It will only be removed for you.`)) return;
+    const wasOpen = this.openId() === c.conversationId;
+    this.conversations
+      .deleteConversation(c.conversationId)
+      .then(() => {
+        if (wasOpen) this.messaging.conversationId.set(null);
+      })
+      .catch(() => this.error.set('Could not delete chat.'));
   }
 
   /** Double-clicking a direct conversation adds the peer to contacts (Phase 11). */

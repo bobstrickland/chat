@@ -44,4 +44,25 @@ public interface ConversationRepository {
 
   /** All receipt positions (delivered/read, per user) for a conversation. */
   List<Receipt> receipts(String conversationId);
+
+  // ---- deletions (Phase 12) -------------------------------------------------
+
+  /** Per-user "delete this chat": stamp the caller's member item with when they cleared it. */
+  void markConversationDeleted(String conversationId, String userId, String deletedAt);
+
+  /** When the user cleared this chat (ISO instant), or null if they never did. */
+  String conversationDeletedAt(String conversationId, String userId);
+
+  /** Per-user "delete for me": hide one message from this user only (a `del#{userId}#{id}` marker). */
+  void hideMessageForUser(String conversationId, String userId, String messageId);
+
+  /** messageIds this user has hidden for themselves in this conversation. */
+  java.util.Set<String> hiddenMessageIds(String conversationId, String userId);
+
+  /**
+   * Delete-for-everyone: tombstone a message (clear body/media, mark deleted), but
+   * ONLY if `requiredSenderId` actually sent it. Returns false if it wasn't theirs
+   * (or doesn't exist), so the caller can reject non-owners.
+   */
+  boolean tombstoneMessage(String conversationId, String sentAt, String messageId, String requiredSenderId);
 }

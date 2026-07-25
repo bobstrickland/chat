@@ -105,11 +105,21 @@ export function createOpenSearchClient({ node, messagesIndex, profilesIndex }) {
      * phone. Phone matches on a digits-only normalization so "(555) 123" and
      * "5551234" line up. `filter visibility=PUBLIC` is belt-and-suspenders — the
      * indexer already keeps only PUBLIC profiles here — so non-public can never leak.
+     * Matching must match all terms up to a maximum of 6 terms
      */
     async searchProfiles(q, size) {
-      const digits = q.replace(/\D/g, "");
-      const should = [{ multi_match: { query: q, fields: ["displayName^3", "tags^2"] } }];
-      if (digits.length >= 3) {
+      // 1. Phone recognition and term consolidation logic
+      const phonePattern = /(?:\+\d{1,4}[\s\-]*)?\(?\d+\)?(?:[\s\-]+\(?\d+\)?)+/g;
+      const phonePatternMatch = q.match(phonePattern);
+      const digits = phonePatternMatch ? phonePatternMatch[0].replace(/\D/g, "") : "";
+
+      const standardizedStr = q.replace(phonePattern, '__PHONE_NUMBER__');
+      const matches = standardizedStr.trim().match(/\S+/g);
+      const parameterCount = matches ? (matches.length > 5 ? 6 : matches.length) : 0;
+
+      // 2. Build the structural OpenSearch clauses
+      const should = [{ multi_match: { query: q, fields: ["displayName^3", "tags^2"],minimum_should_match: parameterCount} }];
+      if (digits.length >= 7) {
         should.push({ wildcard: { phoneDigits: `*${digits}*` } });
       }
       const res = await client.search({
@@ -125,7 +135,12 @@ export function createOpenSearchClient({ node, messagesIndex, profilesIndex }) {
           },
         },
       });
-      return res.body.hits.hits.map((h) => h._source);
+
+      // 4. CROSS-VERSION SAFE DATA EXTRACTION:
+      // Checks v3.x object format first, then falls back to v2.x body wrapping
+      const hits = res.hits?.hits || res.body?.hits?.hits || [];
+      
+      return hits.map((h) => h._source);
     },
   };
 }

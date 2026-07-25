@@ -51,6 +51,22 @@ class DeliveryServiceTest {
       public List<Receipt> receipts(String c) {
         return List.of();
       }
+
+      public void markConversationDeleted(String c, String userId, String at) {}
+
+      public String conversationDeletedAt(String c, String userId) {
+        return null;
+      }
+
+      public void hideMessageForUser(String c, String userId, String messageId) {}
+
+      public java.util.Set<String> hiddenMessageIds(String c, String userId) {
+        return java.util.Set.of();
+      }
+
+      public boolean tombstoneMessage(String c, String sentAt, String messageId, String sender) {
+        return false;
+      }
     };
   }
 

@@ -124,6 +124,31 @@ public final class LambdaHandler implements RequestHandler<Map<String, Object>, 
             conversationId, userId, textOf(body, "kind"), textOf(body, "position"), members);
         return reply(200, Map.of("ok", true));
       }
+      // ---- deletions (Phase 12) ----
+      // DELETE /conversations/{conversationId} — delete this chat for me
+      java.util.regex.Matcher cd =
+          java.util.regex.Pattern.compile("^/conversations/([^/]+)$").matcher(path);
+      if (cd.matches() && "DELETE".equals(method)) {
+        String conversationId = java.net.URLDecoder.decode(cd.group(1), java.nio.charset.StandardCharsets.UTF_8);
+        config().messaging.deleteConversationForUser(userId, conversationId);
+        return reply(200, Map.of("ok", true));
+      }
+      // DELETE /conversations/{conversationId}/messages/{messageId}?scope=&sentAt=
+      java.util.regex.Matcher md =
+          java.util.regex.Pattern.compile("^/conversations/([^/]+)/messages/([^/]+)$").matcher(path);
+      if (md.matches() && "DELETE".equals(method)) {
+        String conversationId = java.net.URLDecoder.decode(md.group(1), java.nio.charset.StandardCharsets.UTF_8);
+        String messageId = java.net.URLDecoder.decode(md.group(2), java.nio.charset.StandardCharsets.UTF_8);
+        Map<String, Object> q = queryParams(event);
+        if ("everyone".equals(q.get("scope"))) {
+          List<String> members = config().messaging.deleteMessageForEveryone(
+              userId, conversationId, String.valueOf(q.get("sentAt")), messageId);
+          config().deletionBroadcaster.broadcast(conversationId, messageId, members);
+        } else {
+          config().messaging.hideMessageForUser(userId, conversationId, messageId);
+        }
+        return reply(200, Map.of("ok", true));
+      }
     } catch (IllegalArgumentException e) {
       return reply(400, Map.of("error", e.getMessage()));
     } catch (IllegalStateException e) {
@@ -151,6 +176,13 @@ public final class LambdaHandler implements RequestHandler<Map<String, Object>, 
     return v == null || v.isNull() ? null : v.asText();
   }
 
+  /** API Gateway HTTP API delivers query params as a {@code queryStringParameters} map. */
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> queryParams(Map<String, Object> event) {
+    Object q = event.get("queryStringParameters");
+    return q instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+  }
+
   private static Map<String, Object> historyBody(
       String userId, String conversationId, List<Message> messages) {
     List<Map<String, Object>> out = new ArrayList<>();
@@ -172,6 +204,7 @@ public final class LambdaHandler implements RequestHandler<Map<String, Object>, 
     map.put("body", m.body());
     map.put("sentAt", m.sentAt().toString());
     map.put("mediaId", m.mediaId());
+    map.put("deleted", m.deleted());
     return map;
   }
 

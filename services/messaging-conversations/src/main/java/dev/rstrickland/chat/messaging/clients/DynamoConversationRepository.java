@@ -135,13 +135,15 @@ public final class DynamoConversationRepository implements ConversationRepositor
 
   private static Message toMessage(String conversationId, Map<String, AttributeValue> item) {
     AttributeValue media = item.get("mediaId");
+    AttributeValue deleted = item.get("deleted");
     return new Message(
         conversationId,
         item.get("messageId").s(),
         item.get("senderId").s(),
         item.get("body").s(),
         Instant.parse(item.get("sentAt").s()),
-        media == null ? null : media.s());
+        media == null ? null : media.s(),
+        deleted != null && Boolean.TRUE.equals(deleted.bool()));
   }
 
   @Override
@@ -254,6 +256,96 @@ public final class DynamoConversationRepository implements ConversationRepositor
               userId, item.get("kind").s(), item.get("position").s()));
     }
     return out;
+  }
+
+  // ---- deletions (Phase 12) -------------------------------------------------
+
+  private static final String DEL_PREFIX = "del#";
+
+  @Override
+  public void markConversationDeleted(String conversationId, String userId, String deletedAt) {
+    // Stamp the caller's OWN member item — a per-user marker, invisible to others.
+    // Conditional on the member item existing so we never create a phantom membership.
+    client.updateItem(
+        software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest.builder()
+            .tableName(table)
+            .key(Map.of("conversationId", s(conversationId), "sk", s(MEMBER_PREFIX + userId)))
+            .updateExpression("SET deletedAt = :d")
+            .conditionExpression("attribute_exists(sk)")
+            .expressionAttributeValues(Map.of(":d", s(deletedAt)))
+            .build());
+  }
+
+  @Override
+  public String conversationDeletedAt(String conversationId, String userId) {
+    var resp =
+        client.getItem(
+            software.amazon.awssdk.services.dynamodb.model.GetItemRequest.builder()
+                .tableName(table)
+                .key(Map.of("conversationId", s(conversationId), "sk", s(MEMBER_PREFIX + userId)))
+                .build());
+    if (!resp.hasItem()) {
+      return null;
+    }
+    AttributeValue d = resp.item().get("deletedAt");
+    return d == null ? null : d.s();
+  }
+
+  @Override
+  public void hideMessageForUser(String conversationId, String userId, String messageId) {
+    // SK "del#{userId}#{messageId}". IMPORTANT: no `userId` attribute (same rule as
+    // receipts) — gsi-user-conversations indexes any item with a userId, which would
+    // resurrect a "deleted" conversation in the list. userId is recoverable from the SK.
+    client.putItem(
+        PutItemRequest.builder()
+            .tableName(table)
+            .item(
+                Map.of(
+                    "conversationId", s(conversationId),
+                    "sk", s(DEL_PREFIX + userId + "#" + messageId),
+                    "hiddenAt", s(Instant.now().toString())))
+            .build());
+  }
+
+  @Override
+  public java.util.Set<String> hiddenMessageIds(String conversationId, String userId) {
+    String prefix = DEL_PREFIX + userId + "#";
+    QueryResponse resp =
+        client.query(
+            QueryRequest.builder()
+                .tableName(table)
+                .keyConditionExpression("conversationId = :c AND begins_with(sk, :p)")
+                .expressionAttributeValues(Map.of(":c", s(conversationId), ":p", s(prefix)))
+                .build());
+    java.util.Set<String> ids = new java.util.HashSet<>();
+    for (Map<String, AttributeValue> item : resp.items()) {
+      ids.add(item.get("sk").s().substring(prefix.length()));
+    }
+    return ids;
+  }
+
+  @Override
+  public boolean tombstoneMessage(
+      String conversationId, String sentAt, String messageId, String requiredSenderId) {
+    try {
+      client.updateItem(
+          software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest.builder()
+              .tableName(table)
+              .key(Map.of("conversationId", s(conversationId), "sk", s(MSG_PREFIX + sentAt + "#" + messageId)))
+              .updateExpression("SET #b = :empty, deleted = :true REMOVE mediaId")
+              // Only the sender may delete-for-everyone, and the message must exist.
+              .conditionExpression("attribute_exists(sk) AND senderId = :sender")
+              .expressionAttributeNames(Map.of("#b", "body"))
+              .expressionAttributeValues(
+                  Map.of(
+                      ":empty", s(""),
+                      ":true", AttributeValue.builder().bool(true).build(),
+                      ":sender", s(requiredSenderId)))
+              .build());
+      return true;
+    } catch (ConditionalCheckFailedException notOwnerOrMissing) {
+      return false;
+    }
   }
 
   @Override
