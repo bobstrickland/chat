@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Teal / Charcoal — Material 3 dark palette (equivalent of the requested Color.kt
+  dark values). PrimaryDark is the bright mint #5EEAD4 (M3: primary lightens in
+  dark), while the sent bubble stays the deeper #0F7B6C teal per spec.
+-->
+<resources>
+    <color name="primary">#5EEAD4</color>
+    <color name="onPrimary">#00332C</color>
+    <color name="primaryContainer">#0A6357</color>
+    <color name="onPrimaryContainer">#A2F2E1</color>
+
+    <color name="secondary">#B1CCC5</color>
+    <color name="onSecondary">#1C3531</color>
+    <color name="secondaryContainer">#334B46</color>
+    <color name="onSecondaryContainer">#CCE8E1</color>
+
+    <color name="tertiary">#F2A03D</color>
+    <color name="onTertiary">#442B00</color>
+    <color name="tertiaryContainer">#63451A</color>
+    <color name="onTertiaryContainer">#FFDDB3</color>
+
+    <color name="error">#FFB4AB</color>
+    <color name="onError">#690005</color>
+    <color name="errorContainer">#93000A</color>
+    <color name="onErrorContainer">#FFDAD6</color>
+
+    <color name="background">#161B1A</color>
+    <color name="onBackground">#E1E3E2</color>
+    <color name="surface">#161B1A</color>
+    <color name="onSurface">#E1E3E2</color>
+    <color name="surfaceVariant">#3F4947</color>
+    <color name="onSurfaceVariant">#BEC9C5</color>
+
+    <color name="surfaceContainerLowest">#101413</color>
+    <color name="surfaceContainerLow">#1B211F</color>
+    <color name="surfaceContainer">#1F2624</color>
+    <color name="surfaceContainerHigh">#2A302E</color>
+    <color name="surfaceContainerHighest">#343B39</color>
+
+    <color name="outline">#899391</color>
+    <color name="outlineVariant">#3F4947</color>
+
+    <!-- Sent bubble stays #0F7B6C in dark too; text is WHITE, not OnPrimaryDark
+         (#00332C on #0F7B6C = ~2.7:1, fails AA). White = ~5.16:1, passes AA. -->
+    <color name="bubble_mine">#0F7B6C</color>          <!-- SentBubbleDark -->
+    <color name="bubble_mine_text">#FFFFFF</color>     <!-- was OnPrimaryDark; overridden for contrast -->
+    <color name="bubble_theirs">#232928</color>        <!-- ReceivedBubbleDark -->
+    <color name="bubble_theirs_text">#E1E3E2</color>   <!-- OnSurfaceDark -->
+
+    <color name="accent">#F2A03D</color>              <!-- AccentDark (same as light) -->
+    <color name="onAccent">#422C00</color>
+
+    <color name="online_indicator">#34C759</color>
+</resources>

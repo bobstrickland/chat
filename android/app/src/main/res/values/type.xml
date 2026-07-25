@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Explicit weight pairings on top of the M3 type scale: headers use a medium
+  weight (sans-serif-medium) with tight tracking; body copy stays regular for
+  readability. Weight is set via the Roboto family names so it applies on all
+  API levels (unlike android:textFontWeight, which needs API 28).
+-->
+<resources>
+    <style name="TextAppearance.App.Display" parent="TextAppearance.Material3.DisplaySmall">
+        <item name="fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">-0.015</item>
+    </style>
+
+    <style name="TextAppearance.App.Headline" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+
+    <style name="TextAppearance.App.Title" parent="TextAppearance.Material3.TitleMedium">
+        <item name="fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.0</item>
+    </style>
+
+    <style name="TextAppearance.App.Body" parent="TextAppearance.Material3.BodyLarge">
+        <item name="fontFamily">sans-serif</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="TextAppearance.App.Label" parent="TextAppearance.Material3.LabelLarge">
+        <item name="fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.01</item>
+    </style>
+</resources>

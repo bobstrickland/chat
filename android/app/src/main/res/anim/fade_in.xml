@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Subtle fade + rise, used for screen content on load. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:interpolator/decelerate_quint">
+    <alpha
+        android:duration="240"
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0" />
+    <translate
+        android:duration="260"
+        android:fromYDelta="12"
+        android:toYDelta="0" />
+</set>

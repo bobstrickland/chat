@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hamburger drawer destinations, mirroring the web nav. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item android:id="@+id/nav_chat" android:title="Chat" android:icon="@drawable/ic_chat" />
+        <item android:id="@+id/nav_search" android:title="Search" android:icon="@drawable/ic_search" />
+        <item android:id="@+id/nav_contacts" android:title="Contacts" android:icon="@drawable/ic_contacts" />
+        <item android:id="@+id/nav_profile" android:title="Profile" android:icon="@drawable/ic_person" />
+    </group>
+    <item android:id="@+id/nav_signout" android:title="Sign Out" android:icon="@drawable/ic_logout" />
+</menu>

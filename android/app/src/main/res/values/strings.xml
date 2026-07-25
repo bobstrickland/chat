@@ -1,0 +1,7 @@
+<resources>
+    <!-- Hijaca = "Hijaca Is Just Another Chat App" -->
+    <string name="app_name">Hijaca</string>
+    <string name="nav_open">Open navigation</string>
+    <string name="nav_close">Close navigation</string>
+    <string name="logo_desc">Hijaca logo</string>
+</resources>

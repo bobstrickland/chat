@@ -1,0 +1,4 @@
+<resources>
+    <!-- Light surface -> dark status/nav icons. Overridden to false in -night. -->
+    <bool name="light_system_bars">true</bool>
+</resources>

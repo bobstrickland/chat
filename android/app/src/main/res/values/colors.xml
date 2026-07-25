@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Teal / Charcoal — Material 3 light palette (the XML/Views equivalent of the
+  requested Color.kt light values). Replaces the previous indigo scheme entirely.
+
+  Source spec -> M3 role:
+    PrimaryLight #0F7B6C  -> primary
+    OnPrimaryLight #FFF   -> onPrimary
+    SurfaceLight #FAFAF9  -> surface / background
+    OnSurfaceLight #1A1C1B-> onSurface / onBackground
+    AccentLight #F2A03D   -> accent (unread/notification badges); also colorTertiary
+    SentBubbleLight       -> bubble_mine
+    ReceivedBubbleLight   -> bubble_theirs
+-->
+<resources>
+    <color name="primary">#0F7B6C</color>
+    <color name="onPrimary">#FFFFFF</color>
+    <color name="primaryContainer">#A2F2E1</color>
+    <color name="onPrimaryContainer">#00201B</color>
+
+    <color name="secondary">#4A635E</color>
+    <color name="onSecondary">#FFFFFF</color>
+    <color name="secondaryContainer">#CCE8E1</color>
+    <color name="onSecondaryContainer">#06201C</color>
+
+    <!-- Tertiary role = the amber accent. -->
+    <color name="tertiary">#F2A03D</color>
+    <color name="onTertiary">#422C00</color>
+    <color name="tertiaryContainer">#FFDDB3</color>
+    <color name="onTertiaryContainer">#2A1700</color>
+
+    <color name="error">#BA1A1A</color>
+    <color name="onError">#FFFFFF</color>
+    <color name="errorContainer">#FFDAD6</color>
+    <color name="onErrorContainer">#410002</color>
+
+    <color name="background">#FAFAF9</color>
+    <color name="onBackground">#1A1C1B</color>
+    <color name="surface">#FAFAF9</color>
+    <color name="onSurface">#1A1C1B</color>
+    <color name="surfaceVariant">#DBE5E1</color>
+    <color name="onSurfaceVariant">#3F4947</color>
+
+    <color name="surfaceContainerLowest">#FFFFFF</color>
+    <color name="surfaceContainerLow">#F4F5F4</color>
+    <color name="surfaceContainer">#EDF0EF</color>
+    <color name="surfaceContainerHigh">#E7EAE9</color>
+    <color name="surfaceContainerHighest">#E1E5E3</color>
+
+    <color name="outline">#6F7976</color>
+    <color name="outlineVariant">#BEC9C5</color>
+
+    <!-- Chat bubbles (fixed brand colors — see Theme note re: dynamic color). -->
+    <color name="bubble_mine">#0F7B6C</color>          <!-- SentBubbleLight -->
+    <color name="bubble_mine_text">#FFFFFF</color>     <!-- OnPrimaryLight -->
+    <color name="bubble_theirs">#E8ECEB</color>        <!-- ReceivedBubbleLight -->
+    <color name="bubble_theirs_text">#1A1C1B</color>   <!-- OnSurfaceLight -->
+
+    <!-- Semantic accents. -->
+    <color name="accent">#F2A03D</color>              <!-- AccentLight: unread/notification badges -->
+    <color name="onAccent">#422C00</color>            <!-- text/number on an accent badge (6.2:1) -->
+
+    <!-- RESERVED: online/presence ONLY. Do not reuse. Same in light + dark. -->
+    <color name="online_indicator">#34C759</color>
+</resources>
