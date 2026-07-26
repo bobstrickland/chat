@@ -98,4 +98,4 @@ jobs:
         if: github.event_name == 'push'
         run: gh variable set VERSION_NUMBER --body "$(( ${{ vars.VERSION_NUMBER }} + 1 ))"
         env:
-          GITHUB_TOKEN: ${{ secrets.BUILD_JAPA_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.BUILD_GITHUB_TOKEN }}
