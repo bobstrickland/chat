@@ -31,7 +31,8 @@ export function getIdentityProvider() {
     const config = {
       region: process.env.COGNITO_REGION ?? process.env.AWS_REGION,
       userPoolId: process.env.COGNITO_USER_POOL_ID,
-      clientId: process.env.COGNITO_CLIENT_ID_WEB, // adapters may override per client type
+      clientId: process.env.COGNITO_CLIENT_ID_WEB, // default (web); federatedLogin picks per client
+      mobileClientId: process.env.COGNITO_CLIENT_ID_MOBILE,
       jwksUrl: process.env.COGNITO_JWKS_URL,
       hostedUiDomain: process.env.COGNITO_HOSTED_UI_DOMAIN,
     };

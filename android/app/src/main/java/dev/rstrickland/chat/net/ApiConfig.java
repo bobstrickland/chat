@@ -24,4 +24,12 @@ public final class ApiConfig {
 
     /** API Gateway WebSocket stand-in (ws-shim). Token rides in the query string. */
     public static final String WS = "ws://" + HOST + ":8090";
+
+    // ---- Cognito Hosted UI (Google sign-in via Custom Tabs) ----
+    // These are public values (they ship in every APK): the Hosted UI domain, the
+    // Cognito MOBILE app client id, and a redirect URI already registered on that
+    // client. The Google credentials live inside Cognito, not here.
+    public static final String HOSTED_UI_DOMAIN = "chat-dev-local.auth.us-east-1.amazoncognito.com";
+    public static final String COGNITO_MOBILE_CLIENT_ID = "scdkebsivhvab3g2799ljjaon";
+    public static final String OAUTH_REDIRECT = "myapp://callback"; // registered mobile callback
 }

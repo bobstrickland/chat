@@ -117,14 +117,20 @@ export class CognitoProvider extends IdentityProvider {
     };
   }
 
-  async federatedLogin({ provider, code, redirectUri }) {
+  async federatedLogin({ provider, code, redirectUri, client }) {
     // Cognito Hosted UI handles the OAuth2 code exchange server-side via its
     // /oauth2/token endpoint. This wraps that HTTP call — not a first-class
     // SDK command like the others.
+    //
+    // The token exchange MUST use the same app client the authorize request used
+    // (Cognito rejects a mismatch). Web uses the web client; the Android app
+    // authorizes with the mobile client, so it passes client:"mobile".
+    const clientId =
+      client === "mobile" ? this.config.mobileClientId : this.config.clientId;
     const tokenUrl = `https://${this.config.hostedUiDomain}/oauth2/token`;
     const body = new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: this.config.clientId,
+      client_id: clientId,
       code,
       redirect_uri: redirectUri,
     });

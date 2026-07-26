@@ -69,4 +69,19 @@ public final class AuthModels {
         public String accessToken;
         public String idToken;
     }
+
+    /** POST /auth/federated — exchange a Hosted-UI auth code for tokens. */
+    public static final class FederatedRequest {
+        public String provider;    // "google"
+        public String code;        // authorization code from the redirect
+        public String redirectUri; // must match the authorize redirect_uri
+        public String client;      // "mobile" — selects the Cognito app client for the exchange
+
+        public FederatedRequest(String provider, String code, String redirectUri, String client) {
+            this.provider = provider;
+            this.code = code;
+            this.redirectUri = redirectUri;
+            this.client = client;
+        }
+    }
 }

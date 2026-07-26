@@ -2,16 +2,27 @@ plugins {
     id 'com.android.application'
 }
 
+// Version comes from app/version.properties, which CI regenerates each release
+// (VERSION_CODE auto-increments so Play accepts every upload). Local builds fall
+// back to sensible defaults when the file is absent.
+def versionProps = new Properties()
+def versionPropsFile = file('version.properties')
+if (versionPropsFile.exists()) {
+    versionPropsFile.withInputStream { versionProps.load(it) }
+}
+def appVersionCode = (versionProps.getProperty('VERSION_CODE') ?: '1') as Integer
+def appVersionName = versionProps.getProperty('VERSION_NAME') ?: '0.1'
+
 android {
-    namespace 'dev.rstrickland.chat'
+    namespace='dev.rstrickland.chat'
     compileSdk 34
 
     defaultConfig {
         applicationId "dev.rstrickland.chat"
         minSdk 26          // emulator + modern devices; 8.0+
         targetSdk 34
-        versionCode 1
-        versionName "0.1"
+        versionCode appVersionCode
+        versionName appVersionName
     }
 
     buildTypes {
@@ -27,7 +38,7 @@ android {
     }
 
     buildFeatures {
-        viewBinding true   // generated binding classes — no findViewById boilerplate
+        viewBinding=true   // generated binding classes — no findViewById boilerplate
     }
 }
 
@@ -37,6 +48,7 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'androidx.fragment:fragment:1.8.3'
+    implementation 'androidx.browser:browser:1.8.0' // Chrome Custom Tabs (Google Hosted-UI sign-in)
     implementation 'androidx.lifecycle:lifecycle-viewmodel:2.8.5'
     implementation 'androidx.lifecycle:lifecycle-livedata:2.8.5'
 

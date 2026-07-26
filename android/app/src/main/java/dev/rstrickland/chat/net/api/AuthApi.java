@@ -19,4 +19,8 @@ public interface AuthApi {
 
     @POST("auth/refresh")
     Call<AuthModels.RefreshResult> refresh(@Body AuthModels.RefreshRequest body);
+
+    /** Google (Hosted UI) code exchange — returns tokens like login. */
+    @POST("auth/federated")
+    Call<AuthModels.LoginResult> federated(@Body AuthModels.FederatedRequest body);
 }

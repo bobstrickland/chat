@@ -1,16 +1,19 @@
 package dev.rstrickland.chat;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.view.animation.AnimationUtils;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.browser.customtabs.CustomTabsIntent;
 
 import dev.rstrickland.chat.databinding.ActivityLoginBinding;
 import dev.rstrickland.chat.model.AuthModels;
 import dev.rstrickland.chat.net.ApiClient;
+import dev.rstrickland.chat.net.ApiConfig;
 import dev.rstrickland.chat.net.TokenStore;
 import dev.rstrickland.chat.realtime.RealtimeClient;
 import retrofit2.Call;
@@ -51,6 +54,71 @@ public final class LoginActivity extends AppCompatActivity {
 
         views.loginContent.startAnimation(AnimationUtils.loadAnimation(this, R.anim.fade_in));
         views.loginButton.setOnClickListener(v -> submit());
+        views.googleButton.setOnClickListener(v -> startGoogleSignIn());
+
+        // If we were launched by the Hosted-UI redirect (cold start), handle it.
+        handleRedirect(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleRedirect(intent); // warm case: Custom Tab redirected back into us
+    }
+
+    // ---- Google sign-in via Cognito Hosted UI (Custom Tabs) ----
+
+    private void startGoogleSignIn() {
+        views.status.setText("");
+        // Authorize against the Cognito Hosted UI, jumping straight to Google.
+        Uri authorize = Uri.parse("https://" + ApiConfig.HOSTED_UI_DOMAIN + "/oauth2/authorize")
+                .buildUpon()
+                .appendQueryParameter("client_id", ApiConfig.COGNITO_MOBILE_CLIENT_ID)
+                .appendQueryParameter("response_type", "code")
+                .appendQueryParameter("scope", "email openid profile")
+                .appendQueryParameter("redirect_uri", ApiConfig.OAUTH_REDIRECT)
+                .appendQueryParameter("identity_provider", "Google")
+                .build();
+        new CustomTabsIntent.Builder().build().launchUrl(this, authorize);
+    }
+
+    private void handleRedirect(Intent intent) {
+        Uri data = intent != null ? intent.getData() : null;
+        if (data == null || !"myapp".equals(data.getScheme())) return;
+
+        String error = data.getQueryParameter("error");
+        if (error != null) {
+            views.status.setText("Google sign-in failed: " + error);
+            return;
+        }
+        String code = data.getQueryParameter("code");
+        if (code != null) exchangeGoogleCode(code);
+    }
+
+    private void exchangeGoogleCode(String code) {
+        setBusy(true);
+        views.status.setText("Completing Google sign-in…");
+        api.auth().federated(new AuthModels.FederatedRequest(
+                "google", code, ApiConfig.OAUTH_REDIRECT, "mobile")).enqueue(new Callback<>() {
+            @Override
+            public void onResponse(@NonNull Call<AuthModels.LoginResult> call,
+                                   @NonNull Response<AuthModels.LoginResult> res) {
+                setBusy(false);
+                if (res.isSuccessful() && res.body() != null && res.body().accessToken != null) {
+                    AuthModels.LoginResult r = res.body();
+                    onSignedIn(r.accessToken, r.idToken, r.refreshToken);
+                } else {
+                    views.status.setText("Google sign-in failed. Please try again.");
+                }
+            }
+
+            @Override
+            public void onFailure(@NonNull Call<AuthModels.LoginResult> call, @NonNull Throwable t) {
+                setBusy(false);
+                views.status.setText("Network error: " + t.getMessage());
+            }
+        });
     }
 
     private void submit() {

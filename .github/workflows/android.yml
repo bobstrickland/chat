@@ -1,0 +1,101 @@
+name: Android CI/CD Pipeline
+
+# The Android app is ONE project in this monorepo (it lives in android/). Only run
+# this pipeline when the Android project (or this workflow) changes — otherwise
+# every backend/web/terraform commit would rebuild and re-deploy the app.
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+
+# No sparse checkout needed: check out the whole repo, but run Gradle inside android/.
+defaults:
+  run:
+    working-directory: android
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # JDK 21: matches gradle/gradle-daemon-jvm.properties (toolchainVersion=21)
+      # and satisfies AGP 8.13.2 / Gradle 9.3.1.
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle*
+            android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Compile check on every push + PR — no secrets required.
+      # --no-daemon runs on this JDK 21, bypassing the JBR daemon-jvm criteria.
+      - name: Build (verify it compiles)
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      # ---------------------------------------------------------------------
+      # Deploy: only on push to master (PRs stop after the compile check above)
+      # ---------------------------------------------------------------------
+      - name: Decode signing keystore
+        if: github.event_name == 'push'
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > my-release-key.jks
+
+      - name: Set version code + name
+        if: github.event_name == 'push'
+        run: |
+          echo "VERSION_CODE=$(( ${{ vars.VERSION_NUMBER }} + 1 ))" > app/version.properties
+          echo "VERSION_NAME=${{ vars.VERSION_NAME }}" >> app/version.properties
+          cat app/version.properties
+
+      - name: Build release AAB
+        if: github.event_name == 'push'
+        run: ./gradlew --no-daemon :app:bundleRelease
+
+      # AAB is signed with the upload key, in place. NOTE: no zipalign — that is
+      # for APKs, and running it after signing would invalidate the signature.
+      - name: Sign AAB (upload key)
+        if: github.event_name == 'push'
+        run: |
+          jarsigner -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore my-release-key.jks \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.KEY_PASSWORD }}" \
+            app/build/outputs/bundle/release/app-release.aab \
+            "${{ secrets.KEY_ALIAS }}"
+
+      - name: Verify signature
+        if: github.event_name == 'push'
+        run: jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab
+
+      # `uses:` steps ignore working-directory, so this path is repo-root-relative.
+      - name: Upload to Google Play
+        if: github.event_name == 'push'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+          packageName: dev.rstrickland.chat
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          tracks: alpha         # internal | alpha | beta | production
+          status: completed     # completed | inProgress | halted | draft
+
+      # Persist the increment only AFTER a successful upload, so a failed deploy
+      # doesn't burn a version number.
+      - name: Persist incremented version number
+        if: github.event_name == 'push'
+        run: gh variable set VERSION_NUMBER --body "$(( ${{ vars.VERSION_NUMBER }} + 1 ))"
+        env:
+          GITHUB_TOKEN: ${{ secrets.BUILD_JAPA_TOKEN }}
