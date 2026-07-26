@@ -14,6 +14,7 @@ on:
     paths:
       - "android/**"
       - ".github/workflows/android.yml"
+  workflow_dispatch:
 
 # No sparse checkout needed: check out the whole repo, but run Gradle inside android/.
 defaults:
