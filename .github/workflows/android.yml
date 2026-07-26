@@ -74,7 +74,7 @@ jobs:
           jarsigner -sigalg SHA256withRSA -digestalg SHA-256 \
             -keystore my-release-key.jks \
             -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
-            -keypass "${{ secrets.KEY_PASSWORD }}" \
+            -keypass "${{ secrets.KEYSTORE_PASSWORD }}" \
             app/build/outputs/bundle/release/app-release.aab \
             "${{ secrets.KEY_ALIAS }}"
 
