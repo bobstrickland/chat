@@ -70,13 +70,16 @@ jobs:
       # for APKs, and running it after signing would invalidate the signature.
       - name: Sign AAB (upload key)
         if: github.event_name == 'push'
+        env:
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           jarsigner -sigalg SHA256withRSA -digestalg SHA-256 \
             -keystore my-release-key.jks \
-            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
-            -keypass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -storepass "$KS_PASS" \
+            -keypass "$KS_PASS" \
             app/build/outputs/bundle/release/app-release.aab \
-            "${{ secrets.KEY_ALIAS }}"
+            "$KY_ALIAS"
 
       - name: Verify signature
         if: github.event_name == 'push'
