@@ -55,6 +55,7 @@ public final class LoginActivity extends AppCompatActivity {
         views.loginContent.startAnimation(AnimationUtils.loadAnimation(this, R.anim.fade_in));
         views.loginButton.setOnClickListener(v -> submit());
         views.googleButton.setOnClickListener(v -> startGoogleSignIn());
+        views.exitButton.setOnClickListener(v -> finishAffinity());
 
         // If we were launched by the Hosted-UI redirect (cold start), handle it.
         handleRedirect(getIntent());

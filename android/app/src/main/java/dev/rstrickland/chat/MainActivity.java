@@ -85,6 +85,8 @@ public final class MainActivity extends AppCompatActivity
         } else if (id == R.id.nav_signout) {
             signOut();
             return true;
+        } else if (id == R.id.nav_exit) {
+            finishAffinity();
         }
         views.drawerLayout.closeDrawer(GravityCompat.START);
         return true;
