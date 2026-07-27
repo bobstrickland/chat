@@ -10,17 +10,17 @@ def versionPropsFile = file('version.properties')
 if (versionPropsFile.exists()) {
     versionPropsFile.withInputStream { versionProps.load(it) }
 }
-def appVersionCode = (versionProps.getProperty('VERSION_CODE') ?: '1') as Integer
+def appVersionCode = (versionProps.getProperty('VERSION_CODE') ?: '2') as Integer
 def appVersionName = versionProps.getProperty('VERSION_NAME') ?: '0.1'
 
 android {
     namespace='dev.rstrickland.chat'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "dev.rstrickland.chat"
-        minSdk 26          // emulator + modern devices; 8.0+
-        targetSdk 34
+        minSdk 26
+        targetSdk 36// emulator + modern devices; 8.0+
         versionCode appVersionCode
         versionName appVersionName
     }

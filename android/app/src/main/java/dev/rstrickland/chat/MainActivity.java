@@ -23,8 +23,9 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 import dev.rstrickland.chat.ui.chat.ChatFragment;
-import dev.rstrickland.chat.ui.misc.PlaceholderFragment;
+import dev.rstrickland.chat.ui.contacts.ContactsFragment;
 import dev.rstrickland.chat.ui.profile.ProfileFragment;
+import dev.rstrickland.chat.ui.search.SearchFragment;
 
 /**
  * The signed-in shell: a Material toolbar with the hamburger, and a
@@ -76,9 +77,9 @@ public final class MainActivity extends AppCompatActivity
         if (id == R.id.nav_chat) {
             showFragment(new ChatFragment(), "Chat", id);
         } else if (id == R.id.nav_search) {
-            showFragment(PlaceholderFragment.of("Search — coming in the next increment"), "Search", id);
+            showFragment(new SearchFragment(), "Search", id);
         } else if (id == R.id.nav_contacts) {
-            showFragment(PlaceholderFragment.of("Contacts — coming in the next increment"), "Contacts", id);
+            showFragment(new ContactsFragment(), "Contacts", id);
         } else if (id == R.id.nav_profile) {
             showFragment(new ProfileFragment(), "Profile", id);
         } else if (id == R.id.nav_signout) {
@@ -87,6 +88,14 @@ public final class MainActivity extends AppCompatActivity
         }
         views.drawerLayout.closeDrawer(GravityCompat.START);
         return true;
+    }
+
+    /**
+     * Jump to the Chat destination and open {@code conversationId} — the shared
+     * entry point Search and Contacts use to start/resume a conversation.
+     */
+    public void openConversation(String conversationId) {
+        showFragment(ChatFragment.openingConversation(conversationId), "Chat", R.id.nav_chat);
     }
 
     private void showFragment(Fragment fragment, String title, int checkedItemId) {

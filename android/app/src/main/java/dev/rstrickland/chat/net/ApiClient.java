@@ -3,8 +3,10 @@ package dev.rstrickland.chat.net;
 import android.content.Context;
 
 import dev.rstrickland.chat.net.api.AuthApi;
+import dev.rstrickland.chat.net.api.ContactsApi;
 import dev.rstrickland.chat.net.api.MessagingApi;
 import dev.rstrickland.chat.net.api.ProfileApi;
+import dev.rstrickland.chat.net.api.SearchApi;
 import okhttp3.OkHttpClient;
 import okhttp3.logging.HttpLoggingInterceptor;
 import retrofit2.Retrofit;
@@ -23,6 +25,8 @@ public final class ApiClient {
     private final AuthApi authApi;
     private final ProfileApi profileApi;
     private final MessagingApi messagingApi;
+    private final ContactsApi contactsApi;
+    private final SearchApi searchApi;
 
     private ApiClient(Context ctx) {
         TokenStore tokens = TokenStore.get(ctx);
@@ -36,8 +40,11 @@ public final class ApiClient {
                 .build();
 
         this.authApi = retrofit(http, ApiConfig.AUTH).create(AuthApi.class);
-        this.profileApi = retrofit(http, ApiConfig.PROFILE).create(ProfileApi.class);
+        Retrofit profileRetrofit = retrofit(http, ApiConfig.PROFILE);
+        this.profileApi = profileRetrofit.create(ProfileApi.class);
+        this.contactsApi = profileRetrofit.create(ContactsApi.class); // contacts live on the Profile service
         this.messagingApi = retrofit(http, ApiConfig.MESSAGING).create(MessagingApi.class);
+        this.searchApi = retrofit(http, ApiConfig.SEARCH).create(SearchApi.class);
     }
 
     private static Retrofit retrofit(OkHttpClient http, String baseUrl) {
@@ -63,5 +70,13 @@ public final class ApiClient {
 
     public MessagingApi messaging() {
         return messagingApi;
+    }
+
+    public ContactsApi contacts() {
+        return contactsApi;
+    }
+
+    public SearchApi search() {
+        return searchApi;
     }
 }

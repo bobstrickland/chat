@@ -17,6 +17,7 @@ import dev.rstrickland.chat.R;
 import dev.rstrickland.chat.databinding.FragmentChatBinding;
 import dev.rstrickland.chat.model.ChatModels;
 import dev.rstrickland.chat.net.ApiClient;
+import dev.rstrickland.chat.net.ConversationIds;
 import dev.rstrickland.chat.net.NameResolver;
 import dev.rstrickland.chat.net.TokenStore;
 import dev.rstrickland.chat.realtime.RealtimeClient;
@@ -32,6 +33,20 @@ import retrofit2.Response;
  */
 public final class ChatFragment extends Fragment implements RealtimeClient.FrameListener {
 
+    private static final String ARG_OPEN = "openConversationId";
+
+    /**
+     * A ChatFragment that jumps straight into {@code conversationId} once its
+     * list has loaded — used when Search or Contacts sends the user into a chat.
+     */
+    public static ChatFragment openingConversation(String conversationId) {
+        ChatFragment f = new ChatFragment();
+        Bundle args = new Bundle();
+        args.putString(ARG_OPEN, conversationId);
+        f.setArguments(args);
+        return f;
+    }
+
     private FragmentChatBinding views;
     private ApiClient api;
     private String myUserId;
@@ -40,6 +55,9 @@ public final class ChatFragment extends Fragment implements RealtimeClient.Frame
     private MessageAdapter messageAdapter;
     private NameResolver names;
     private String openConversationId; // null while showing the list
+
+    private java.util.List<ChatModels.ConversationRow> loaded = new java.util.ArrayList<>();
+    private String pendingOpenId; // a conversation to auto-open once the list loads
 
     @Nullable
     @Override
@@ -68,6 +86,9 @@ public final class ChatFragment extends Fragment implements RealtimeClient.Frame
         views.backButton.setOnClickListener(v -> showList());
         views.sendButton.setOnClickListener(v -> send());
 
+        Bundle args = getArguments();
+        pendingOpenId = args != null ? args.getString(ARG_OPEN) : null;
+
         RealtimeClient.get().addListener(this);
         loadConversations();
     }
@@ -87,8 +108,11 @@ public final class ChatFragment extends Fragment implements RealtimeClient.Frame
             public void onResponse(@NonNull Call<ChatModels.ConversationsResponse> call,
                                    @NonNull Response<ChatModels.ConversationsResponse> res) {
                 if (views != null && res.body() != null) {
-                    conversationAdapter.submit(res.body().conversations);
+                    loaded = res.body().conversations != null
+                            ? res.body().conversations : new java.util.ArrayList<>();
+                    conversationAdapter.submit(loaded);
                     views.rvConversations.scheduleLayoutAnimation();
+                    maybeOpenPending();
                 }
             }
 
@@ -148,6 +172,39 @@ public final class ChatFragment extends Fragment implements RealtimeClient.Frame
             public void onFailure(@NonNull Call<ChatModels.HistoryResponse> call, @NonNull Throwable t) {
             }
         });
+    }
+
+    /**
+     * If we were asked to jump into a conversation (from Search/Contacts), open it
+     * once the list has loaded — preferring the loaded row (for its name/peer),
+     * else a row derived from the id. Runs once; then clears the pending id.
+     */
+    private void maybeOpenPending() {
+        if (pendingOpenId == null) return;
+        String id = pendingOpenId;
+        pendingOpenId = null;
+
+        ChatModels.ConversationRow row = null;
+        for (ChatModels.ConversationRow r : loaded) {
+            if (id.equals(r.conversationId)) {
+                row = r;
+                break;
+            }
+        }
+        openConversation(row != null ? row : deriveRow(id));
+    }
+
+    /** A minimal row for a conversation the list doesn't (yet) contain. */
+    private ChatModels.ConversationRow deriveRow(String conversationId) {
+        ChatModels.ConversationRow row = new ChatModels.ConversationRow();
+        row.conversationId = conversationId;
+        if (ConversationIds.isGroup(conversationId)) {
+            row.type = "group";
+        } else {
+            row.type = "direct";
+            row.peerId = ConversationIds.peerOf(conversationId, myUserId);
+        }
+        return row;
     }
 
     private void send() {
