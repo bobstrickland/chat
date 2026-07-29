@@ -33,5 +33,34 @@ export function createProfileServiceClient({ baseUrl, internalApiKey, timeoutMs 
 
       return res.json();
     },
+
+    /**
+     * Delete a user's profile data (profile row + their contacts + search
+     * de-index) as part of full account deletion. Calls Profile's own
+     * self-authenticated `DELETE /profiles/{userId}` route with the caller's
+     * bearer — no internal key, no privileged "delete any profile" surface, and
+     * Profile's own self-only check still applies. Must be called while the
+     * access token is still valid (i.e. BEFORE the Cognito user is deleted).
+     */
+    async deleteProfileAsUser({ userId, accessToken }) {
+      if (!baseUrl) {
+        throw new Error("PROFILE_SERVICE_URL is required to delete profiles");
+      }
+
+      const res = await fetch(
+        `${baseUrl.replace(/\/$/, "")}/profiles/${encodeURIComponent(userId)}`,
+        {
+          method: "DELETE",
+          headers: { authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(timeoutMs),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`profile deletion failed: ${res.status} ${await res.text()}`);
+      }
+
+      return res.json();
+    },
   };
 }

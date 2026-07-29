@@ -17,14 +17,28 @@
         android:orientation="horizontal"
         android:padding="14dp">
 
-        <TextView
-            android:id="@+id/avatar"
+        <!-- Initials by default; the contact's photo (when set) overlays them. -->
+        <FrameLayout
             android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="@drawable/bg_avatar"
-            android:gravity="center"
-            android:textAppearance="?attr/textAppearanceTitleMedium"
-            android:textColor="?attr/colorOnPrimaryContainer" />
+            android:layout_height="48dp">
+
+            <TextView
+                android:id="@+id/avatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_avatar"
+                android:gravity="center"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
+                android:textColor="?attr/colorOnPrimaryContainer" />
+
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/avatarImage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.App.Circle" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/name"

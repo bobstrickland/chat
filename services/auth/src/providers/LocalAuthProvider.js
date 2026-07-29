@@ -62,6 +62,12 @@ export class LocalAuthProvider extends IdentityProvider {
     return { userId: claims.sub, email: claims.email, tokenUse: claims.token_use };
   }
 
+  async deleteAccount({ accessToken }) {
+    const claims = jwt.verify(accessToken, this.signingSecret);
+    this.users.delete(claims.email);
+    return { email: claims.email ?? null };
+  }
+
   _signToken(user, tokenUse, expiresIn = "1h") {
     return jwt.sign(
       { sub: user.userId, email: user.email, token_use: tokenUse },

@@ -4,6 +4,7 @@ import android.content.Context;
 
 import dev.rstrickland.chat.net.api.AuthApi;
 import dev.rstrickland.chat.net.api.ContactsApi;
+import dev.rstrickland.chat.net.api.MediaApi;
 import dev.rstrickland.chat.net.api.MessagingApi;
 import dev.rstrickland.chat.net.api.ProfileApi;
 import dev.rstrickland.chat.net.api.SearchApi;
@@ -27,6 +28,7 @@ public final class ApiClient {
     private final MessagingApi messagingApi;
     private final ContactsApi contactsApi;
     private final SearchApi searchApi;
+    private final MediaApi mediaApi;
 
     private ApiClient(Context ctx) {
         TokenStore tokens = TokenStore.get(ctx);
@@ -45,6 +47,7 @@ public final class ApiClient {
         this.contactsApi = profileRetrofit.create(ContactsApi.class); // contacts live on the Profile service
         this.messagingApi = retrofit(http, ApiConfig.MESSAGING).create(MessagingApi.class);
         this.searchApi = retrofit(http, ApiConfig.SEARCH).create(SearchApi.class);
+        this.mediaApi = retrofit(http, ApiConfig.MEDIA).create(MediaApi.class);
     }
 
     private static Retrofit retrofit(OkHttpClient http, String baseUrl) {
@@ -78,5 +81,9 @@ public final class ApiClient {
 
     public SearchApi search() {
         return searchApi;
+    }
+
+    public MediaApi media() {
+        return mediaApi;
     }
 }

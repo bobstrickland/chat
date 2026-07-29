@@ -6,6 +6,7 @@ import { enrollMfa } from "../core/enrollMfa.js";
 import { verifyMfa } from "../core/verifyMfa.js";
 import { federatedLogin } from "../core/federatedLogin.js";
 import { verifyToken } from "../core/verifyToken.js";
+import { deleteAccount } from "../core/deleteAccount.js";
 
 // Per CLAUDE.md: no reliance on Lambda execution-context reuse for
 // correctness. This module-level instance is a warm-start perf bonus only —
@@ -35,6 +36,24 @@ export const handler = async (event) => {
   }
 
   const routeKey = `${event.requestContext?.http?.method} ${event.requestContext?.http?.path}`;
+
+  // Account deletion (Phase 12.5) is token-driven, not body-driven, so it can't
+  // go through the generic (deps, body) ROUTES map — handle it explicitly.
+  if (routeKey === "DELETE /auth/account") {
+    const header = event.headers?.authorization ?? event.headers?.Authorization ?? "";
+    const accessToken = header.startsWith("Bearer ") ? header.slice(7) : null;
+    if (!accessToken) {
+      return { statusCode: 401, body: JSON.stringify({ error: "missing bearer token" }) };
+    }
+    try {
+      const claims = await deps.identityProvider.verifyToken({ token: accessToken });
+      const result = await deleteAccount(deps, { userId: claims.userId, accessToken });
+      return { statusCode: 200, body: JSON.stringify(result) };
+    } catch (err) {
+      return { statusCode: 400, body: JSON.stringify({ error: err.message }) };
+    }
+  }
+
   const coreFn = ROUTES[routeKey];
 
   if (!coreFn) {

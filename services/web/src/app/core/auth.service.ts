@@ -88,6 +88,21 @@ export class AuthService {
     this.tokenStore.clear();
   }
 
+  /**
+   * Permanently delete the signed-in user's account (Phase 12.5): Auth deletes
+   * the Cognito user + its ledger row and cascades profile/contacts/search
+   * cleanup. The bearer is attached explicitly because the interceptor skips
+   * `/auth/*`. On success the local session is cleared — the token is dead the
+   * moment the Cognito user is gone.
+   */
+  deleteAccount(): Observable<{ deleted: boolean }> {
+    return this.http
+      .delete<{ deleted: boolean }>('/auth/account', {
+        headers: { Authorization: `Bearer ${this.tokenStore.accessToken}` },
+      })
+      .pipe(tap(() => this.tokenStore.clear()));
+  }
+
   // --- federated (Google via Cognito Hosted UI) -----------------------------
 
   /**

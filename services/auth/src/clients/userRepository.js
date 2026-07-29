@@ -1,4 +1,9 @@
-import { PutCommand, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  PutCommand,
+  GetCommand,
+  UpdateCommand,
+  DeleteCommand,
+} from "@aws-sdk/lib-dynamodb";
 
 /**
  * Auth's own record of who exists. Keyed by `email` (PK) to match
@@ -64,6 +69,17 @@ export function createUserRepository(docClient, tableName) {
         })
       );
       return result.Attributes;
+    },
+
+    /**
+     * Remove the ledger row on account deletion (Phase 12.5). Keyed by email.
+     * Idempotent — deleting an absent row is a no-op — so a retry of account
+     * deletion can't fail here.
+     */
+    async remove({ email }) {
+      await docClient.send(
+        new DeleteCommand({ TableName: tableName, Key: { email } })
+      );
     },
   };
 }

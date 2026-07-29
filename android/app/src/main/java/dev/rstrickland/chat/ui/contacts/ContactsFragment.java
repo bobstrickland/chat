@@ -50,13 +50,20 @@ public final class ContactsFragment extends Fragment implements ContactAdapter.A
         api = ApiClient.get(requireContext());
         myUserId = TokenStore.get(requireContext()).userId();
 
-        adapter = new ContactAdapter(this);
+        adapter = new ContactAdapter(this, api.media());
         views.rvContacts.setLayoutManager(new LinearLayoutManager(requireContext()));
         views.rvContacts.setLayoutAnimation(
                 AnimationUtils.loadLayoutAnimation(requireContext(), R.anim.layout_animation));
         views.rvContacts.setAdapter(adapter);
+    }
 
-        load();
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Restore the title (it was changed by the detail screen) and reload — the
+        // latter also refreshes after returning from detail (e.g. a removed contact).
+        requireActivity().setTitle("Contacts");
+        if (views != null) load();
     }
 
     @Override
@@ -98,6 +105,13 @@ public final class ContactsFragment extends Fragment implements ContactAdapter.A
         if (contact.userId == null || myUserId == null) return;
         String conversationId = ConversationIds.direct(myUserId, contact.userId);
         ((MainActivity) requireActivity()).openConversation(conversationId);
+    }
+
+    @Override
+    public void onOpen(Contact contact) {
+        if (contact.userId == null) return;
+        ((MainActivity) requireActivity())
+                .showDetailFragment(ContactDetailFragment.of(contact), contact.label());
     }
 
     @Override

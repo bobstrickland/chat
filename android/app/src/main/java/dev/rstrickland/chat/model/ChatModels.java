@@ -12,6 +12,9 @@ public final class ChatModels {
         public String name;        // group name (null for direct)
         public String peerId;      // other participant (direct only)
         public Message lastMessage;
+        // Direct chats only. NOT sent by the backend (Messaging can't read Profile
+        // data) — resolved client-side from the peer's profile via NameResolver.
+        public String avatarMediaId;
 
         /** A display title: group name, or the peer id for a direct (names come later). */
         public String title() {

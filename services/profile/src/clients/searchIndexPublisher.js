@@ -13,7 +13,7 @@ import { Kafka, logLevel } from "kafkajs";
  */
 export function createSearchIndexPublisher({ brokers, topic }) {
   if (!brokers) {
-    return { async publishProfile() {} };
+    return { async publishProfile() {}, async publishProfileDeleted() {} };
   }
 
   const kafka = new Kafka({
@@ -52,6 +52,38 @@ export function createSearchIndexPublisher({ brokers, topic }) {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error(`[profile] search.index publish failed: ${err.message}`);
+      }
+    },
+
+    /**
+     * De-index a deleted profile from people-search. Sent on the same
+     * `search.index` channel: the indexer removes any profile whose visibility
+     * isn't PUBLIC (its PUBLIC→PRIVATE removal path), so a non-PUBLIC visibility
+     * here deletes the doc with NO search-service change. `deleted:true` is
+     * carried for forward-clarity if the indexer ever wants an explicit signal.
+     */
+    async publishProfileDeleted(userId) {
+      if (!userId) return;
+      try {
+        connected ??= producer.connect();
+        await connected;
+        await producer.send({
+          topic,
+          messages: [
+            {
+              key: userId,
+              value: JSON.stringify({
+                kind: "profile",
+                userId,
+                deleted: true,
+                visibility: "DELETED", // any non-PUBLIC → indexer removes the doc
+              }),
+            },
+          ],
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[profile] search.index delete publish failed: ${err.message}`);
       }
     },
   };

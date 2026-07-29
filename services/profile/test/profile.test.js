@@ -261,6 +261,49 @@ test("a user cannot delete another user's profile", async () => {
   assert.ok(await profileRepository.get({ userId: "owner" }), "profile must survive");
 });
 
+test("delete cascades: profile row + own contacts + search de-index (Phase 12.5)", async () => {
+  const profileRepository = fakeRepo();
+  await provisionProfile({ profileRepository }, { userId: "me", email: "me@example.com" });
+  // "me" added alice + bob; carol added "me" (a reverse contact).
+  const contactRepository = fakeContacts([["me", "alice"], ["me", "bob"], ["carol", "me"]]);
+
+  const deindexed = [];
+  const searchIndexPublisher = { async publishProfileDeleted(id) { deindexed.push(id); } };
+
+  const result = await deleteProfile(
+    { profileRepository, contactRepository, searchIndexPublisher },
+    { userId: "me", callerUserId: "me" }
+  );
+
+  assert.deepEqual(result, { deleted: true, userId: "me" });
+  assert.equal(await profileRepository.get({ userId: "me" }), null, "profile row gone");
+  assert.deepEqual(await contactRepository.list({ userId: "me" }), [], "own contacts gone");
+  assert.deepEqual(deindexed, ["me"], "de-indexed from people-search");
+  // Reverse contact left intact — degrades gracefully, per the design.
+  assert.equal(
+    await contactRepository.isContact({ userId: "carol", contactId: "me" }),
+    true,
+    "others' contact lists are left untouched"
+  );
+});
+
+test("delete tolerates search/contacts cleanup failure (best-effort)", async () => {
+  const profileRepository = fakeRepo();
+  await provisionProfile({ profileRepository }, { userId: "me", email: "me@example.com" });
+  const contactRepository = fakeContacts([["me", "alice"]]);
+  const searchIndexPublisher = {
+    async publishProfileDeleted() { throw new Error("kafka down"); },
+  };
+
+  // The profile row must still be deleted even though de-index throws.
+  const result = await deleteProfile(
+    { profileRepository, contactRepository, searchIndexPublisher },
+    { userId: "me", callerUserId: "me" }
+  );
+  assert.equal(result.deleted, true);
+  assert.equal(await profileRepository.get({ userId: "me" }), null);
+});
+
 // ---------------------------------------------------------------------------
 // update validation
 // ---------------------------------------------------------------------------

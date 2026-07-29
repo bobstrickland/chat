@@ -1,7 +1,8 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { PresencePanelComponent } from '../presence/presence-panel';
+import { AuthService } from '../../core/auth.service';
 import { ProfileService } from '../../core/profile.service';
 import { MediaService } from '../../core/media.service';
 import { Profile } from '../../core/models';
@@ -104,6 +105,18 @@ const MAX_LINKS = 10;
       }
 
       <p class="alt"><a routerLink="/mfa-enroll">Set up two-factor auth</a></p>
+
+      <div class="danger">
+        <h2>Danger zone</h2>
+        <p class="hint">
+          Permanently delete your account — your profile, contacts, and sign-in.
+          This cannot be undone.
+        </p>
+        @if (deleteError()) { <p class="err">{{ deleteError() }}</p> }
+        <button type="button" class="danger-btn" [disabled]="deleting()" (click)="confirmDelete()">
+          {{ deleting() ? 'Deleting…' : 'Delete account' }}
+        </button>
+      </div>
     </section>
 
     <app-presence-panel />
@@ -118,12 +131,18 @@ const MAX_LINKS = 10;
       .upload { cursor: pointer; padding: 0.4rem 0.7rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; }
       .upload.busy { opacity: 0.5; cursor: wait; }
       small.hint { display: block; color: var(--muted); font-size: 0.75rem; margin-top: 0.15rem; }
+      .danger { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+      .danger h2 { font-size: 0.95rem; color: var(--err, #c0392b); margin: 0 0 0.25rem; }
+      .danger-btn { background: var(--err, #c0392b); color: #fff; border: none; }
+      .danger-btn:disabled { opacity: 0.6; cursor: wait; }
     `,
   ],
 })
 export class ProfileComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly profiles = inject(ProfileService);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
   protected readonly media = inject(MediaService);
 
   readonly loading = signal(true);
@@ -132,6 +151,9 @@ export class ProfileComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly saved = signal(false);
   readonly profile = signal<Profile | null>(null);
+
+  readonly deleting = signal(false);
+  readonly deleteError = signal<string | null>(null);
 
   // Avatar isn't a form control (it's an upload), so track it + a dirty flag
   // separately, and fold that into the Save button's enabled state.
@@ -216,6 +238,23 @@ export class ProfileComponent implements OnInit {
           this.error.set(errorMessage(err));
         },
       });
+  }
+
+  confirmDelete(): void {
+    const ok = window.confirm(
+      'Permanently delete your account? This removes your profile and contacts, ' +
+        'signs you out everywhere, and cannot be undone.',
+    );
+    if (!ok) return;
+    this.deleting.set(true);
+    this.deleteError.set(null);
+    this.auth.deleteAccount().subscribe({
+      next: () => this.router.navigate(['/login']),
+      error: (err) => {
+        this.deleting.set(false);
+        this.deleteError.set(errorMessage(err));
+      },
+    });
   }
 
   private applyProfile(p: Profile): void {

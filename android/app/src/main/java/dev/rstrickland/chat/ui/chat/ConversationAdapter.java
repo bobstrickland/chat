@@ -3,6 +3,7 @@ package dev.rstrickland.chat.ui.chat;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -16,7 +17,9 @@ import java.util.List;
 
 import dev.rstrickland.chat.R;
 import dev.rstrickland.chat.model.ChatModels.ConversationRow;
+import dev.rstrickland.chat.net.AvatarLoader;
 import dev.rstrickland.chat.net.NameResolver;
+import dev.rstrickland.chat.net.api.MediaApi;
 
 /** The conversation list. Tapping a row opens that conversation. */
 public final class ConversationAdapter extends RecyclerView.Adapter<ConversationAdapter.VH> {
@@ -29,9 +32,11 @@ public final class ConversationAdapter extends RecyclerView.Adapter<Conversation
     private final OnOpen onOpen;
     private final NameResolver names;
 
-    public ConversationAdapter(OnOpen onOpen, NameResolver names) {
+    private final MediaApi mediaApi;
+    public ConversationAdapter(OnOpen onOpen, NameResolver names, MediaApi mediaApi) {
         this.onOpen = onOpen;
         this.names = names;
+        this.mediaApi = mediaApi;
     }
 
     public void submit(List<ConversationRow> rows) {
@@ -60,22 +65,29 @@ public final class ConversationAdapter extends RecyclerView.Adapter<Conversation
         h.time.setText(hasLast ? formatTime(row.lastMessage.sentAt) : "");
         h.itemView.setOnClickListener(v -> onOpen.open(row));
 
+        // Reset the photo every bind so a recycled row never shows a stale avatar
+        // (the initials underneath show through until/unless a photo loads).
+        AvatarLoader.load(mediaApi, null, h.avatarImage);
+
         if ("group".equals(row.type)) {
             String name = row.name != null ? row.name : "Group";
             h.title.setText("# " + name);
-            h.avatar.setText(initials(name));
+            h.avatar.setText(initials(name)); // groups keep initials (no avatar)
         } else {
-            // Direct: show the peer's DISPLAY NAME, never their userId. Resolve
-            // async; tag the row so a recycled holder doesn't get a stale name.
+            // Direct: show the peer's DISPLAY NAME + avatar, never their userId.
+            // Both come from ONE profile fetch (NameResolver). Tag the row so a
+            // recycled holder doesn't get a stale result.
             String key = row.conversationId;
             h.itemView.setTag(key);
             h.title.setText(NameResolver.LOADING);
             h.avatar.setText("");
-            names.resolve(row.peerId, name -> {
-                if (key.equals(h.itemView.getTag())) {
-                    h.title.setText(name);
-                    h.avatar.setText(initials(name));
-                }
+            names.resolveIdentity(row.peerId, (name, avatarMediaId) -> {
+                if (!key.equals(h.itemView.getTag())) return; // recycled — drop
+                h.title.setText(name);
+                if (NameResolver.LOADING.equals(name)) return; // still resolving
+                h.avatar.setText(initials(name));
+                row.avatarMediaId = avatarMediaId; // populate the row
+                AvatarLoader.load(mediaApi, avatarMediaId, h.avatarImage);
             });
         }
     }
@@ -104,6 +116,7 @@ public final class ConversationAdapter extends RecyclerView.Adapter<Conversation
         final TextView title;
         final TextView preview;
         final TextView time;
+        final ImageView avatarImage;
 
         VH(@NonNull View v) {
             super(v);
@@ -111,6 +124,7 @@ public final class ConversationAdapter extends RecyclerView.Adapter<Conversation
             title = v.findViewById(R.id.title);
             preview = v.findViewById(R.id.preview);
             time = v.findViewById(R.id.time);
+            avatarImage = v.findViewById(R.id.avatarImage);
         }
     }
 }

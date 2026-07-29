@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="180dp"
     android:background="?attr/colorPrimaryContainer"
@@ -7,15 +8,29 @@
     android:orientation="vertical"
     android:padding="20dp">
 
-    <TextView
-        android:id="@+id/headerAvatar"
+    <!-- Initials by default; the photo (when set) overlays them. -->
+    <FrameLayout
         android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:background="@drawable/bg_avatar_strong"
-        android:gravity="center"
-        android:text="S"
-        android:textAppearance="?attr/textAppearanceHeadlineSmall"
-        android:textColor="?attr/colorOnPrimary" />
+        android:layout_height="56dp">
+
+        <TextView
+            android:id="@+id/headerAvatar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_avatar_strong"
+            android:gravity="center"
+            android:text="S"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+            android:textColor="?attr/colorOnPrimary" />
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/headerAvatarImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:visibility="gone"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.App.Circle" />
+    </FrameLayout>
 
     <TextView
         android:layout_width="wrap_content"

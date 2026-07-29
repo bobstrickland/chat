@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfaceContainerLow"
+    android:fillViewport="true">
+
+    <!-- fillViewport + the weighted spacer keeps the Remove button at the bottom of
+         the screen when content is short, and lets everything scroll when it isn't. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Avatar: initials with the photo (when available) overlaid. -->
+        <FrameLayout
+            android:layout_width="112dp"
+            android:layout_height="112dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="12dp">
+
+            <TextView
+                android:id="@+id/detailAvatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_avatar"
+                android:gravity="center"
+                android:textAppearance="?attr/textAppearanceDisplaySmall"
+                android:textColor="?attr/colorOnPrimaryContainer" />
+
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/detailAvatarImage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.App.Circle" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/detailName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+            android:textColor="?attr/colorOnSurface" />
+
+        <!-- Message: right below the avatar/name, above the rest of the info. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/detailMessageButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Message" />
+
+        <TextView
+            android:id="@+id/detailRestricted"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
+        <!-- Info blocks — each hidden until it has a value. -->
+        <LinearLayout
+            android:id="@+id/blockBio"
+            style="@style/ContactDetailBlock"
+            android:visibility="gone">
+
+            <TextView style="@style/ContactDetailLabel" android:text="Bio" />
+
+            <TextView
+                android:id="@+id/valBio"
+                style="@style/ContactDetailValue" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/blockPhone"
+            style="@style/ContactDetailBlock"
+            android:visibility="gone">
+
+            <TextView style="@style/ContactDetailLabel" android:text="Phone" />
+
+            <TextView
+                android:id="@+id/valPhone"
+                style="@style/ContactDetailValue"
+                android:autoLink="phone" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/blockLinks"
+            style="@style/ContactDetailBlock"
+            android:visibility="gone">
+
+            <TextView style="@style/ContactDetailLabel" android:text="Links" />
+
+            <!-- No autoLink: taps are intercepted to confirm before opening a browser. -->
+            <TextView
+                android:id="@+id/valLinks"
+                style="@style/ContactDetailValue" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/blockTags"
+            style="@style/ContactDetailBlock"
+            android:visibility="gone">
+
+            <TextView style="@style/ContactDetailLabel" android:text="Tags" />
+
+            <TextView
+                android:id="@+id/valTags"
+                style="@style/ContactDetailValue" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/blockVisibility"
+            style="@style/ContactDetailBlock"
+            android:visibility="gone">
+
+            <TextView style="@style/ContactDetailLabel" android:text="Visibility" />
+
+            <TextView
+                android:id="@+id/valVisibility"
+                style="@style/ContactDetailValue" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/blockAdded"
+            style="@style/ContactDetailBlock"
+            android:visibility="gone">
+
+            <TextView style="@style/ContactDetailLabel" android:text="Added" />
+
+            <TextView
+                android:id="@+id/valAdded"
+                style="@style/ContactDetailValue" />
+        </LinearLayout>
+
+        <!-- Pushes Remove to the bottom when the content is short. -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="24dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/detailRemoveButton"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Remove contact"
+            android:textColor="?attr/colorError"
+            app:strokeColor="?attr/colorError" />
+    </LinearLayout>
+</ScrollView>

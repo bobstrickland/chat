@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -11,12 +12,14 @@ import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.GravityCompat;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 
 import com.google.android.material.navigation.NavigationView;
 
 import dev.rstrickland.chat.databinding.ActivityMainBinding;
 import dev.rstrickland.chat.model.Profile;
 import dev.rstrickland.chat.net.ApiClient;
+import dev.rstrickland.chat.net.AvatarLoader;
 import dev.rstrickland.chat.net.TokenStore;
 import dev.rstrickland.chat.realtime.RealtimeClient;
 import retrofit2.Call;
@@ -62,7 +65,10 @@ public final class MainActivity extends AppCompatActivity
 
         // Nav header: who's signed in — display name, else email, NEVER the userId.
         View header = views.navView.getHeaderView(0);
-        bindOwnIdentity(header.findViewById(R.id.headerSubtitle), header.findViewById(R.id.headerAvatar));
+        bindOwnIdentity(
+                header.findViewById(R.id.headerSubtitle),
+                header.findViewById(R.id.headerAvatar),
+                header.findViewById(R.id.headerAvatarImage));
 
         // Ensure the realtime socket is up on relaunch, then land on Chat.
         RealtimeClient.get().start(tokens.accessToken());
@@ -101,6 +107,8 @@ public final class MainActivity extends AppCompatActivity
     }
 
     private void showFragment(Fragment fragment, String title, int checkedItemId) {
+        // Top-level (drawer) navigation resets any drill-down (e.g. contact detail).
+        getSupportFragmentManager().popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
         getSupportFragmentManager().beginTransaction()
                 .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out)
                 .replace(R.id.fragmentHost, fragment)
@@ -110,8 +118,23 @@ public final class MainActivity extends AppCompatActivity
         views.drawerLayout.closeDrawer(GravityCompat.START);
     }
 
+    /**
+     * Push a drill-down screen (e.g. contact detail) onto the back stack so system
+     * back returns to the current destination. The drawer/toolbar stay in place, so
+     * the hamburger + nav header are available here exactly like every other screen.
+     */
+    public void showDetailFragment(Fragment fragment, String title) {
+        getSupportFragmentManager().beginTransaction()
+                .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out)
+                .replace(R.id.fragmentHost, fragment)
+                .addToBackStack("detail")
+                .commit();
+        setTitle(title);
+        views.drawerLayout.closeDrawer(GravityCompat.START);
+    }
+
     /** Show the signed-in user as display name -> email -> "You". Never the userId. */
-    private void bindOwnIdentity(TextView label, TextView avatar) {
+    private void bindOwnIdentity(TextView label, TextView avatar, ImageView avatarImage) {
         String email = tokens.email();
         setIdentity(label, avatar, email != null ? email : "You");
         ApiClient.get(this).profile().getMine().enqueue(new Callback<>() {
@@ -122,6 +145,9 @@ public final class MainActivity extends AppCompatActivity
                         ? p.displayName.trim()
                         : (email != null ? email : "You");
                 setIdentity(label, avatar, name);
+                // Show the avatar photo over the initials if the user has one.
+                AvatarLoader.load(ApiClient.get(MainActivity.this).media(),
+                        p != null ? p.avatarMediaId : null, avatarImage);
             }
 
             @Override

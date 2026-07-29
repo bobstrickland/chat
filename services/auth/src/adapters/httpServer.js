@@ -7,6 +7,7 @@ import { enrollMfa } from "../core/enrollMfa.js";
 import { verifyMfa } from "../core/verifyMfa.js";
 import { federatedLogin } from "../core/federatedLogin.js";
 import { verifyToken } from "../core/verifyToken.js";
+import { deleteAccount } from "../core/deleteAccount.js";
 
 const app = express();
 app.use(express.json());
@@ -36,6 +37,25 @@ app.post("/auth/mfa/enroll", handle(enrollMfa));
 app.post("/auth/mfa/verify", handle(verifyMfa));
 app.post("/auth/federated", handle(federatedLogin));
 app.post("/auth/verify-token", handle(verifyToken));
+
+// Full account deletion (Phase 12.5). Needs the raw access token (to delete the
+// Cognito user + forward to Profile), which handle() doesn't pass — so it reads
+// the bearer directly. The token IS the authorization: you can only ever delete
+// your own account. Claims are verified so we have the userId to hand off.
+app.delete("/auth/account", async (req, res) => {
+  const header = req.headers.authorization ?? "";
+  const accessToken = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!accessToken) {
+    return res.status(401).json({ error: "missing bearer token" });
+  }
+  try {
+    const claims = await deps.identityProvider.verifyToken({ token: accessToken });
+    const result = await deleteAccount(deps, { userId: claims.userId, accessToken });
+    res.status(200).json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
 app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
 

@@ -6,6 +6,8 @@ import {
   VerifySoftwareTokenCommand,
   SetUserMFAPreferenceCommand,
   GetTokensFromRefreshTokenCommand,
+  GetUserCommand,
+  DeleteUserCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { IdentityProvider } from "./IdentityProvider.js";
 import { verifyCognitoToken } from "../clients/jwksVerifier.js";
@@ -164,5 +166,20 @@ export class CognitoProvider extends IdentityProvider {
       email: claims.email ?? null,
       tokenUse: claims.token_use === "id" ? "id" : "access",
     };
+  }
+
+  async deleteAccount({ accessToken }) {
+    // Capture the email BEFORE deleting — the access token is invalidated by
+    // DeleteUser, and Auth's ledger row is keyed by email. GetUser works off the
+    // access token (an id token would carry email in claims, but the API takes
+    // an access token), so we read the attribute here.
+    const me = await this.client.send(new GetUserCommand({ AccessToken: accessToken }));
+    const email = me.UserAttributes?.find((a) => a.Name === "email")?.Value ?? null;
+
+    // The irreversible finalizer. Self-delete via the access token — no admin
+    // privilege required, and it can only ever delete the caller's own account.
+    await this.client.send(new DeleteUserCommand({ AccessToken: accessToken }));
+
+    return { email };
   }
 }

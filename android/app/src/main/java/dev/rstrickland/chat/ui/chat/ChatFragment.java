@@ -73,7 +73,7 @@ public final class ChatFragment extends Fragment implements RealtimeClient.Frame
         myUserId = TokenStore.get(requireContext()).userId();
         names = NameResolver.get(requireContext());
 
-        conversationAdapter = new ConversationAdapter(this::openConversation, names);
+        conversationAdapter = new ConversationAdapter(this::openConversation, names, api.media());
         views.rvConversations.setLayoutManager(new LinearLayoutManager(requireContext()));
         views.rvConversations.setLayoutAnimation(
                 AnimationUtils.loadLayoutAnimation(requireContext(), R.anim.layout_animation));

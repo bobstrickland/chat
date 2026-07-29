@@ -43,4 +43,35 @@
         <item name="android:textAppearance">?attr/textAppearanceTitleMedium</item>
         <item name="android:background">@drawable/bg_avatar</item>
     </style>
+
+    <!-- Fully-circular clip for a ShapeableImageView (avatar photo). -->
+    <style name="ShapeAppearance.App.Circle" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
+    <!-- Contact-detail info rows: a muted label above its value. -->
+    <style name="ContactDetailBlock" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginTop">18dp</item>
+    </style>
+
+    <style name="ContactDetailLabel" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelSmall</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+    </style>
+
+    <style name="ContactDetailValue" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodyLarge</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textColorLink">?attr/colorPrimary</item>
+    </style>
 </resources>

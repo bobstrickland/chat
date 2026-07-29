@@ -75,4 +75,17 @@ export class IdentityProvider {
   async verifyToken(input) {
     throw new Error("not implemented");
   }
+
+  /**
+   * Delete the caller's own account from the identity provider, identified by
+   * their access token. Returns the account's email so the caller can also
+   * clean up Auth's own ledger row (keyed by email). This is the irreversible
+   * finalizer of account deletion — call it last.
+   *
+   * @param {{ accessToken: string }} input
+   * @returns {Promise<{ email: string|null }>}
+   */
+  async deleteAccount(input) {
+    throw new Error("not implemented");
+  }
 }
