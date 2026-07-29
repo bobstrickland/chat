@@ -74,6 +74,18 @@
             android:paddingHorizontal="12dp"
             android:paddingVertical="10dp">
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/attachButton"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="2dp"
+                android:contentDescription="Attach media"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:icon="@drawable/ic_attach"
+                app:iconTint="?attr/colorOnSurfaceVariant" />
+
             <EditText
                 android:id="@+id/composer"
                 android:layout_width="0dp"

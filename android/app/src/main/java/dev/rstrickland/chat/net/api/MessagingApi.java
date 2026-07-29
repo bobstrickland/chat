@@ -23,4 +23,9 @@ public interface MessagingApi {
     @POST("conversations/{conversationId}/messages")
     Call<ChatModels.Message> send(@Path("conversationId") String conversationId,
                                   @Body ChatModels.SendRequest body);
+
+    /** Record a position-based receipt (kind: delivered|read). Fire-and-forget. */
+    @POST("conversations/{conversationId}/receipts")
+    Call<Void> sendReceipt(@Path("conversationId") String conversationId,
+                           @Body ChatModels.ReceiptRequest body);
 }

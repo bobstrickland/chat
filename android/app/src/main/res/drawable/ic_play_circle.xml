@@ -1,0 +1,10 @@
+<!-- Play overlay for a video poster. White glyph on a translucent scrim disc so it
+     reads over any frame. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp" android:height="56dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#66000000"
+        android:pathData="M12,12m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0" />
+    <path android:fillColor="@android:color/white"
+        android:pathData="M9.5,7.5v9l7,-4.5z" />
+</vector>

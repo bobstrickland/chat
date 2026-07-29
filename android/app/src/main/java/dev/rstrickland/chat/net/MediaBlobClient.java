@@ -3,8 +3,11 @@ package dev.rstrickland.chat.net;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -65,6 +68,29 @@ public final class MediaBlobClient {
                 Bitmap bmp = BitmapFactory.decodeStream(in);
                 if (bmp == null) throw new IOException("could not decode image");
                 return bmp;
+            }
+        }
+    }
+
+    /**
+     * Download a presigned GET URL to {@code dest} (a local cache file) — used for
+     * video/audio, which are played by the platform MediaPlayer/VideoView from a
+     * local path (they can't reach the emulator-rewritten MinIO host themselves,
+     * so we fetch the bytes in-process first). Blocking; call off the main thread.
+     */
+    public void downloadToFile(String url, File dest) throws IOException {
+        Request request = new Request.Builder().url(url).get().build();
+        try (Response res = http.newCall(request).execute()) {
+            if (!res.isSuccessful()) {
+                throw new IOException("media download failed: " + res.code());
+            }
+            ResponseBody body = res.body();
+            if (body == null) throw new IOException("empty media body");
+            try (InputStream in = body.byteStream();
+                 OutputStream out = new FileOutputStream(dest)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
             }
         }
     }

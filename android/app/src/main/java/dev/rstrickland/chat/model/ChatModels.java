@@ -40,6 +40,7 @@ public final class ChatModels {
     public static final class HistoryResponse {
         public String conversationId;
         public List<Message> messages;
+        public List<Receipt> receipts;   // Phase 7: current read/delivered positions per member
     }
 
     public static final class SendRequest {
@@ -49,6 +50,24 @@ public final class ChatModels {
         public SendRequest(String body, String mediaId) {
             this.body = body;
             this.mediaId = mediaId;
+        }
+    }
+
+    /** A member's furthest read/delivered position in a conversation (Phase 7). */
+    public static final class Receipt {
+        public String userId;
+        public String kind;      // "delivered" | "read"
+        public String position;  // the covered message's ISO sentAt
+    }
+
+    /** POST /conversations/{id}/receipts body. */
+    public static final class ReceiptRequest {
+        public String kind;
+        public String position;
+
+        public ReceiptRequest(String kind, String position) {
+            this.kind = kind;
+            this.position = position;
         }
     }
 }

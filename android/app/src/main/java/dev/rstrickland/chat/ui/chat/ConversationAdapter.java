@@ -59,10 +59,8 @@ public final class ConversationAdapter extends RecyclerView.Adapter<Conversation
     public void onBindViewHolder(@NonNull VH h, int position) {
         ConversationRow row = items.get(position);
 
-        boolean hasLast = row.lastMessage != null;
-        h.preview.setText(hasLast && row.lastMessage.body != null && !row.lastMessage.body.isEmpty()
-                ? row.lastMessage.body : "—");
-        h.time.setText(hasLast ? formatTime(row.lastMessage.sentAt) : "");
+        h.preview.setText(previewOf(row));
+        h.time.setText(row.lastMessage != null ? formatTime(row.lastMessage.sentAt) : "");
         h.itemView.setOnClickListener(v -> onOpen.open(row));
 
         // Reset the photo every bind so a recycled row never shows a stale avatar
@@ -90,6 +88,16 @@ public final class ConversationAdapter extends RecyclerView.Adapter<Conversation
                 AvatarLoader.load(mediaApi, avatarMediaId, h.avatarImage);
             });
         }
+    }
+
+    /** List preview: the last message body, or a label for a media-only message. */
+    private static String previewOf(ConversationRow row) {
+        if (row.lastMessage == null) return "—";
+        String body = row.lastMessage.body;
+        if (body != null && !body.isEmpty()) return body;
+        String mediaId = row.lastMessage.mediaId;
+        if (mediaId != null && !mediaId.isEmpty()) return "📎 Attachment";
+        return "—";
     }
 
     private static String initials(String name) {

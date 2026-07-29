@@ -18,6 +18,48 @@
         android:textColor="?attr/colorPrimary"
         android:visibility="gone" />
 
+    <!-- Media attachment (image thumbnail / video poster). The play overlay shows
+         only for video. The adapter sets visibility + taps. -->
+    <FrameLayout
+        android:id="@+id/mediaContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="2dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/mediaImage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:background="@drawable/bg_bubble_theirs"
+            android:contentDescription="attachment"
+            android:maxWidth="260dp"
+            android:maxHeight="280dp"
+            android:scaleType="fitCenter" />
+
+        <ImageView
+            android:id="@+id/playOverlay"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
+            android:contentDescription="play"
+            android:src="@drawable/ic_play_circle"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- Audio / generic-file chip (tap to play/open). Styled like a bubble. -->
+    <TextView
+        android:id="@+id/mediaChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="2dp"
+        android:maxWidth="290dp"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="10dp"
+        android:textAppearance="?attr/textAppearanceBodyLarge"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/bubble"
         android:layout_width="wrap_content"
@@ -26,4 +68,15 @@
         android:paddingHorizontal="14dp"
         android:paddingVertical="10dp"
         android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+    <!-- Delivery tick for MY direct messages (✓ sent / ✓✓ delivered / ✓✓ read).
+         The adapter sets the glyph, color, and visibility. -->
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:layout_marginHorizontal="6dp"
+        android:textAppearance="?attr/textAppearanceLabelSmall"
+        android:visibility="gone" />
 </LinearLayout>
