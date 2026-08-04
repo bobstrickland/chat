@@ -73,12 +73,56 @@ resource "aws_iam_role_policy" "kms" {
   policy   = data.aws_iam_policy_document.kms_access.json
 }
 
-# ---- Secrets Manager, scoped to own path prefix ----
+# ---- Secrets Manager ----
+#
+# Two kinds of grant:
+#
+#   1. Own prefix — `secret:{service}/*`. A service can read anything under its
+#      own name and nothing else.
+#   2. SHARED secrets — a credential used by exactly two services, where one
+#      sends and the other verifies (the internal API keys). Storing it twice,
+#      once under each service's prefix, invites the values drifting apart: rotate
+#      one, forget the other, and the caller is silently rejected. So it's stored
+#      ONCE under `shared/` and granted to precisely the roles that need it —
+#      still least privilege, since the grant names the individual secret rather
+#      than the whole `shared/` prefix.
+#
+# The trailing `-*` on shared ARNs is required, not sloppy: Secrets Manager
+# appends a random 6-character suffix to every secret's ARN.
+locals {
+  # secret name -> the service roles allowed to read it
+  shared_secrets = {
+    "shared/profile-internal-api-key"  = ["auth", "profile"]
+    "shared/presence-internal-api-key" = ["messaging-conversations", "presence-connection"]
+  }
+
+  # inverted: service -> ARNs of the shared secrets it may read
+  shared_secret_arns_by_service = {
+    for svc in local.services : svc => [
+      for name, allowed in local.shared_secrets :
+      "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${name}-*"
+      if contains(allowed, svc)
+    ]
+  }
+}
+
 data "aws_iam_policy_document" "secrets_access" {
   for_each = toset(local.services)
+
   statement {
+    sid       = "OwnPrefix"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = ["arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${each.key}/*"]
+  }
+
+  # Only emitted for the four services that actually share a secret.
+  dynamic "statement" {
+    for_each = length(local.shared_secret_arns_by_service[each.key]) > 0 ? [1] : []
+    content {
+      sid       = "SharedSecrets"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = local.shared_secret_arns_by_service[each.key]
+    }
   }
 }
 

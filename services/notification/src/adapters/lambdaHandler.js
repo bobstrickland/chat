@@ -1,10 +1,26 @@
 import { getDependencies, getVapidPublicKey } from "../config.js";
+import { loadSecrets } from "../secrets.js";
 import { registerDevice } from "../core/registerDevice.js";
+import { unregisterDevice } from "../core/unregisterDevice.js";
 import { sendPushToRecipient } from "../core/sendPushToRecipient.js";
 
 // Per CLAUDE.md: no reliance on warm context for correctness — lazy init is a
 // warm-start bonus only.
 let deps;
+
+/**
+ * Secrets are fetched on the first invocation of a container and reused while it
+ * lives. Correctness never depends on that reuse: a cold start simply fetches
+ * again. The promise (not a boolean) is memoized so two concurrent invocations
+ * can't both fetch.
+ */
+let secretsReady;
+
+async function ready() {
+  secretsReady ??= loadSecrets();
+  await secretsReady;
+  deps ??= getDependencies();
+}
 
 /**
  * AWS-side adapters. Two entry points in one file, calling the same core:
@@ -14,7 +30,7 @@ let deps;
  */
 
 export const handler = async (event) => {
-  deps ??= getDependencies();
+  await ready();
   const method = event.requestContext?.http?.method;
   const path = event.requestContext?.http?.path ?? "";
 
@@ -42,12 +58,26 @@ export const handler = async (event) => {
       return reply(400, { error: err.message });
     }
   }
+  if (method === "DELETE" && path.startsWith("/device-tokens/")) {
+    let claims;
+    try {
+      claims = await deps.verifyToken(bearer(event));
+    } catch {
+      return reply(401, { error: "invalid token" });
+    }
+    try {
+      const deviceId = decodeURIComponent(path.slice("/device-tokens/".length));
+      return reply(200, await unregisterDevice(deps, { userId: claims.userId, deviceId }));
+    } catch (err) {
+      return reply(400, { error: err.message });
+    }
+  }
   return reply(404, { error: "not found" });
 };
 
 /** MSK event source: each record is a notification.trigger event. */
 export const mskHandler = async (event) => {
-  deps ??= getDependencies();
+  await ready();
   for (const records of Object.values(event.records ?? {})) {
     for (const record of records) {
       const value = Buffer.from(record.value, "base64").toString("utf8");

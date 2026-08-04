@@ -1,6 +1,9 @@
 package dev.rstrickland.chat;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
@@ -8,7 +11,10 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.GravityCompat;
@@ -25,6 +31,8 @@ import dev.rstrickland.chat.model.Profile;
 import dev.rstrickland.chat.net.ApiClient;
 import dev.rstrickland.chat.net.AvatarLoader;
 import dev.rstrickland.chat.net.TokenStore;
+import dev.rstrickland.chat.push.Notifications;
+import dev.rstrickland.chat.push.PushRegistrar;
 import dev.rstrickland.chat.realtime.RealtimeClient;
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -52,6 +60,16 @@ public final class MainActivity extends AppCompatActivity
      * open ChatFragment separately posts the stronger `read` receipt.
      */
     private final RealtimeClient.FrameListener deliveryAck = this::ackDelivery;
+
+    /**
+     * API 33+ asks before we may show notifications. The outcome doesn't gate
+     * REGISTRATION — we register the FCM token either way, so that enabling
+     * notifications later in system settings just starts working without needing
+     * another sign-in.
+     */
+    private final ActivityResultLauncher<String> notificationPermission =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(),
+                    granted -> PushRegistrar.register(this));
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -102,8 +120,49 @@ public final class MainActivity extends AppCompatActivity
         // Ensure the realtime socket is up on relaunch, then land on Chat.
         RealtimeClient.get().start(tokens.accessToken());
         RealtimeClient.get().addListener(deliveryAck);
+
+        // Offline push: ask for permission (33+) and register this device's FCM
+        // token with the Notification service. Best-effort — see PushRegistrar.
+        ensurePushRegistration();
+
         if (savedInstanceState == null) {
-            showFragment(new ChatFragment(), "Chat", R.id.nav_chat);
+            String fromPush = conversationIdFrom(getIntent());
+            showFragment(
+                    fromPush != null ? ChatFragment.openingConversation(fromPush) : new ChatFragment(),
+                    "Chat", R.id.nav_chat);
+        }
+    }
+
+    /**
+     * A push tapped while the app is already running (singleTop) lands here rather
+     * than in onCreate — jump to the conversation it was about.
+     */
+    @Override
+    protected void onNewIntent(@NonNull Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String conversationId = conversationIdFrom(intent);
+        if (conversationId != null && views != null) {
+            openConversation(conversationId);
+        }
+    }
+
+    /** The conversation a notification tap refers to, or null for a normal launch. */
+    private static String conversationIdFrom(Intent intent) {
+        if (intent == null) return null;
+        String id = intent.getStringExtra(Notifications.EXTRA_CONVERSATION_ID);
+        return (id == null || id.isEmpty()) ? null : id;
+    }
+
+    private void ensurePushRegistration() {
+        boolean needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED;
+        if (needsPermission) {
+            // The launcher callback registers once the user has answered.
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS);
+        } else {
+            PushRegistrar.register(this);
         }
     }
 
@@ -224,14 +283,25 @@ public final class MainActivity extends AppCompatActivity
     }
 
     private void exit() {
-        RealtimeClient.get().stop();
-        tokens.clear();
-        finishAffinity();
+        endSession(this::finishAffinity);
     }
+
     private void signOut() {
+        endSession(this::goToLogin);
+    }
+
+    /**
+     * Tear down the session: stop the socket, unregister from push, THEN clear the
+     * tokens (the unregister call is bearer-authed, so the order matters) and hand
+     * off. The callback always runs, so a push-service hiccup can't strand the user
+     * in a half-signed-out state.
+     */
+    private void endSession(Runnable then) {
         RealtimeClient.get().stop();
-        tokens.clear();
-        goToLogin();
+        PushRegistrar.unregister(this, () -> {
+            tokens.clear();
+            then.run();
+        });
     }
 
     private void goToLogin() {

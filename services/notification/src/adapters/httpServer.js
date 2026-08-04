@@ -1,11 +1,22 @@
 import express from "express";
 import { getDependencies, getVapidPublicKey, getConsumerConfig } from "../config.js";
+import { loadSecrets } from "../secrets.js";
 import { registerDevice } from "../core/registerDevice.js";
+import { unregisterDevice } from "../core/unregisterDevice.js";
 import { sendPushToRecipient } from "../core/sendPushToRecipient.js";
 import { createNotificationConsumer } from "../clients/kafkaConsumer.js";
 
 const app = express();
 app.use(express.json());
+
+// Secrets BEFORE dependencies: getDependencies() reads VAPID/FCM values straight
+// out of the environment, so hydration has to finish first. No-op unless
+// SECRETS_PROVIDER=awssm. Top-level await — this module is ESM.
+const secrets = await loadSecrets();
+if (secrets.provider === "awssm") {
+  // eslint-disable-next-line no-console
+  console.log(`[secrets] loaded from Secrets Manager: ${secrets.loaded.join(", ") || "none"}`);
+}
 
 const deps = getDependencies();
 
@@ -36,6 +47,21 @@ app.post("/device-tokens", authenticate, async (req, res) => {
       subscription: req.body?.subscription,
     });
     res.status(201).json(result);
+  } catch (err) {
+    const status = err.message === "unauthenticated" ? 401 : 400;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+// Drop this device's registration — called on sign-out so the next user of the
+// phone doesn't receive the previous user's pushes.
+app.delete("/device-tokens/:deviceId", authenticate, async (req, res) => {
+  try {
+    const result = await unregisterDevice(deps, {
+      userId: req.claims.userId,
+      deviceId: req.params.deviceId,
+    });
+    res.status(200).json(result);
   } catch (err) {
     const status = err.message === "unauthenticated" ? 401 : 400;
     res.status(status).json({ error: err.message });

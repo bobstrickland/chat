@@ -2,6 +2,22 @@ plugins {
     id 'com.android.application'
 }
 
+// FCM push: the google-services plugin turns app/google-services.json into the
+// Firebase config resources the SDK reads at startup. That file is per-Firebase-
+// project, contains a project's own ids, and is gitignored — so it will NOT be
+// present on a fresh clone, and the plugin FAILS THE BUILD when it's missing.
+//
+// Applying it conditionally keeps the project building without Firebase set up;
+// push simply stays off (PushRegistrar checks at runtime and no-ops). Drop the
+// file in from the Firebase console and push activates on the next build — no
+// code change. See android/README.md.
+def firebaseConfig = file('google-services.json')
+if (firebaseConfig.exists()) {
+    apply plugin: 'com.google.gms.google-services'
+} else {
+    logger.lifecycle("[chat] app/google-services.json absent — FCM push disabled in this build")
+}
+
 // Version comes from app/version.properties, which CI regenerates each release
 // (VERSION_CODE auto-increments so Play accepts every upload). Local builds fall
 // back to sensible defaults when the file is absent.
@@ -23,12 +39,39 @@ android {
         targetSdk 36// emulator + modern devices; 8.0+
         versionCode appVersionCode
         versionName appVersionName
+
+        // Cognito Hosted UI — same dev pool for both build types today. Public
+        // values that ship in every APK; the Google credentials live in Cognito.
+        buildConfigField "String", "HOSTED_UI_DOMAIN", '"chat-dev-local.auth.us-east-1.amazoncognito.com"'
+        buildConfigField "String", "COGNITO_MOBILE_CLIENT_ID", '"scdkebsivhvab3g2799ljjaon"'
+        // MUST match the pool's registered mobile callback and the manifest's
+        // intent-filter scheme (terraform: mobile_callback_urls).
+        buildConfigField "String", "OAUTH_REDIRECT", '"myapp://callback"'
     }
 
+    // ONE api host per build type, path-routed — see net/ApiConfig. Locally that
+    // host is the nginx gateway in docker-compose (local-dev/gateway), which is
+    // what replaced the old seven host:port constants.
     buildTypes {
+        debug {
+            // 10.0.2.2 = the emulator's alias for the host machine. For a real
+            // device on the same LAN, swap in your machine's LAN IP here.
+            buildConfigField "String", "API_BASE_URL", '"http://10.0.2.2:8080/"'
+            buildConfigField "String", "WS_URL", '"ws://10.0.2.2:8080/ws"'
+            // Dev-only: MinIO presigned URLs are signed for localhost:9000, which
+            // on the emulator is the emulator itself (see net/DevMediaDns).
+            buildConfigField "String", "DEV_BLOB_HOST", '"10.0.2.2"'
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Flattened, env-prefixed hostnames (CLAUDE.md "AWS Environment").
+            // NOTE: dev-api/dev-ws do not exist yet — no API Gateway in Terraform —
+            // so these are the intended targets, not verified ones.
+            buildConfigField "String", "API_BASE_URL", '"https://dev-api.chat.rstrickland.dev/"'
+            buildConfigField "String", "WS_URL", '"wss://dev-ws.chat.rstrickland.dev"'
+            // Empty: no localhost rewriting against a real HTTPS media host.
+            buildConfigField "String", "DEV_BLOB_HOST", '""'
         }
     }
 
@@ -39,6 +82,7 @@ android {
 
     buildFeatures {
         viewBinding=true   // generated binding classes — no findViewById boilerplate
+        buildConfig=true   // endpoint config per build type (see ApiConfig)
     }
 }
 
@@ -57,4 +101,10 @@ dependencies {
     implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+
+    // Push (FCM). The BOM keeps the Firebase artifacts version-aligned. Only
+    // messaging is pulled in — no Analytics, no other Firebase products. Safe to
+    // compile against even without google-services.json; it just never initializes.
+    implementation platform('com.google.firebase:firebase-bom:34.17.0')
+    implementation 'com.google.firebase:firebase-messaging'
 }

@@ -30,10 +30,6 @@ variable "state_bucket_arn" {
   type = string
 }
 
-variable "state_lock_table_arn" {
-  type = string
-}
-
 variable "tags" {
   type    = map(string)
   default = {}

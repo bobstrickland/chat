@@ -73,3 +73,24 @@ Config via env (`.env`): `PRESENCE_CONNECTIONS_TABLE`, `KAFKA_BROKERS`,
   own HTTP-API Lambda route when deployed (Phase 10). Locally, HttpServerMain
   serves everything.
 - MSK IAM auth isn't exercised (Redpanda is plaintext).
+
+## Kafka auth (`KAFKA_AUTH`)
+
+`plaintext` (default, and when unset) = local Redpanda, no TLS, no auth.
+`iam` = TLS + SASL IAM, which real MSK requires (`client_broker=TLS` +
+`sasl.iam=true`), so a plaintext client cannot connect to it at all. Set it to
+`iam` for any AWS deployment; credentials come from the default AWS chain (the
+task/Lambda role). Implementation: `clients/KafkaSecurity` (AWS_MSK_IAM mechanism), applied to the event producer.
+
+## Secrets (`SECRETS_PROVIDER`)
+
+`env` (default, incl. blank) uses the `.env` value; `awssm` reads
+**`shared/presence-internal-api-key`** from AWS Secrets Manager (field `apiKey`)
+and falls back to the environment if it can't. This service verifies that key.
+
+One stored value shared by both ends, so a rotation can't leave caller and
+verifier disagreeing; `terraform/modules/iam` grants that individual secret to
+exactly these two roles. Implementation: `clients/SecretsLoader` (the Java
+counterpart to the Node services' `clients/secretsLoader.js`, same env switch).
+Resolution happens once at startup, so a rotated secret needs a restart.
+

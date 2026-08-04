@@ -1,35 +1,52 @@
 package dev.rstrickland.chat.net;
 
+import dev.rstrickland.chat.BuildConfig;
+
 /**
- * Backend endpoints. There's no single gateway in local dev (the web client uses
- * a dev proxy), so each service has its own host:port — the same map as the web
- * client's proxy.conf.json. On the Android emulator, {@code 10.0.2.2} is the host
- * machine's loopback, so these reach the docker-compose services running there.
+ * Backend endpoints — ONE host, path-routed, the same shape as the deployed API.
  *
- * For a real device or a deployed environment, point HOST at the API hostname
- * (and switch to https / a single API Gateway) — nothing else here changes.
+ * This used to be seven {@code host:port} constants (`:3001`…`:3007`) because
+ * local dev had no gateway. That topology existed nowhere but a developer's
+ * machine, and it made the client encode which service owns which path. There is
+ * now a local nginx gateway (`local-dev/gateway/`, host port 8080) mirroring the
+ * web client's `proxy.conf.json`, so every environment presents a single base URL
+ * and the Retrofit paths ({@code auth/login}, {@code profiles/me}, …) resolve
+ * against it unchanged.
+ *
+ * Values come from {@code BuildConfig}, set per build type in
+ * {@code app/build.gradle}:
+ *
+ * <ul>
+ *   <li><b>debug</b> — {@code http://10.0.2.2:8080/} (the emulator's alias for the
+ *       host machine) and {@code ws://10.0.2.2:8080/ws}
+ *   <li><b>release</b> — the deployed {@code https://} / {@code wss://} hostnames
+ * </ul>
+ *
+ * Switching environments is therefore a build-type change, not a source edit. For
+ * a REAL DEVICE on the same LAN, override the debug values in build.gradle with
+ * the machine's LAN IP — {@code 10.0.2.2} is emulator-only.
  */
 public final class ApiConfig {
     private ApiConfig() {}
 
-    public static final String HOST = "10.0.2.2"; // emulator -> host machine
+    /** Single REST base. The trailing slash matters — Retrofit resolves against it. */
+    public static final String API_BASE = BuildConfig.API_BASE_URL;
 
-    public static final String AUTH = "http://" + HOST + ":3001/";
-    public static final String PROFILE = "http://" + HOST + ":3002/"; // profiles + contacts
-    public static final String MESSAGING = "http://" + HOST + ":3003/";
-    public static final String PRESENCE = "http://" + HOST + ":3004/";
-    public static final String NOTIFICATION = "http://" + HOST + ":3005/";
-    public static final String MEDIA = "http://" + HOST + ":3006/";
-    public static final String SEARCH = "http://" + HOST + ":3007/";
-
-    /** API Gateway WebSocket stand-in (ws-shim). Token rides in the query string. */
-    public static final String WS = "ws://" + HOST + ":8090";
+    /** WebSocket endpoint (ws-shim locally, API Gateway WS deployed). Token in the query. */
+    public static final String WS = BuildConfig.WS_URL;
 
     // ---- Cognito Hosted UI (Google sign-in via Custom Tabs) ----
-    // These are public values (they ship in every APK): the Hosted UI domain, the
-    // Cognito MOBILE app client id, and a redirect URI already registered on that
-    // client. The Google credentials live inside Cognito, not here.
-    public static final String HOSTED_UI_DOMAIN = "chat-dev-local.auth.us-east-1.amazoncognito.com";
-    public static final String COGNITO_MOBILE_CLIENT_ID = "scdkebsivhvab3g2799ljjaon";
-    public static final String OAUTH_REDIRECT = "myapp://callback"; // registered mobile callback
+    // Public values — they ship in every APK. The Google credentials live inside
+    // Cognito, not here.
+    public static final String HOSTED_UI_DOMAIN = BuildConfig.HOSTED_UI_DOMAIN;
+    public static final String COGNITO_MOBILE_CLIENT_ID = BuildConfig.COGNITO_MOBILE_CLIENT_ID;
+    public static final String OAUTH_REDIRECT = BuildConfig.OAUTH_REDIRECT;
+
+    /**
+     * DEV ONLY, and empty in a release build: what {@code localhost} should
+     * resolve to when fetching MinIO presigned URLs (see {@link DevMediaDns} for
+     * why the URL itself can't be rewritten). Deliberately NOT the gateway —
+     * media bytes go straight to object storage, never through it.
+     */
+    public static final String DEV_BLOB_HOST = BuildConfig.DEV_BLOB_HOST;
 }

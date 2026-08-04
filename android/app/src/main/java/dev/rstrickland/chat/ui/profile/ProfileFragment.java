@@ -39,6 +39,7 @@ import dev.rstrickland.chat.net.ApiClient;
 import dev.rstrickland.chat.net.AvatarLoader;
 import dev.rstrickland.chat.net.MediaBlobClient;
 import dev.rstrickland.chat.net.TokenStore;
+import dev.rstrickland.chat.push.PushRegistrar;
 import dev.rstrickland.chat.realtime.RealtimeClient;
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -248,6 +249,17 @@ public final class ProfileFragment extends Fragment {
     private void deleteAccount() {
         views.deleteAccountButton.setEnabled(false);
         views.status.setText("Deleting account…");
+        // Unregister this device from push FIRST, and wait for it: the call is
+        // bearer-authed and the token dies with the account, so afterwards is too
+        // late. Left registered, the row outlives the user and still gets pushed to
+        // — Messaging doesn't know the account is gone, so a peer sending into the
+        // old conversation would light up this phone. The callback always runs, so
+        // a push-service hiccup can't block the deletion.
+        PushRegistrar.unregister(requireContext(), this::submitAccountDeletion);
+    }
+
+    private void submitAccountDeletion() {
+        if (!isAdded() || views == null) return;
         api.auth().deleteAccount().enqueue(new Callback<>() {
             @Override
             public void onResponse(@NonNull Call<Void> call, @NonNull Response<Void> res) {
@@ -269,7 +281,11 @@ public final class ProfileFragment extends Fragment {
         });
     }
 
-    /** Tear down the session and return to the login screen, clearing the back stack. */
+    /**
+     * Tear down the session and return to the login screen, clearing the back stack.
+     * No push unregister here — deleteAccount already did it, while the token was
+     * still valid.
+     */
     private void signOutToLogin() {
         RealtimeClient.get().stop();
         TokenStore.get(requireContext()).clear();

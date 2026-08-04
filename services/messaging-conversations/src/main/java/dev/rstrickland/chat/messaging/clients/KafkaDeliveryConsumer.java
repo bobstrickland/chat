@@ -53,6 +53,7 @@ public final class KafkaDeliveryConsumer implements AutoCloseable {
     props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
     props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
     props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
+    KafkaSecurity.apply(props); // SASL_SSL + AWS_MSK_IAM when KAFKA_AUTH=iam
 
     try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
       consumer.subscribe(List.of(topic));

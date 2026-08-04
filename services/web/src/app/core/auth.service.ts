@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, finalize, map, shareReplay, tap } from 'rxjs';
 import { TokenStore } from './token-store';
+import { PushService } from './push.service';
 import { AUTH_CONFIG, oauthRedirectUri } from './auth-config';
 import {
   LoginResult,
@@ -25,6 +26,7 @@ import {
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly tokenStore = inject(TokenStore);
+  private readonly push = inject(PushService);
 
   register(email: string, password: string): Observable<RegisterResult> {
     return this.http.post<RegisterResult>('/auth/register', { email, password });
@@ -85,6 +87,10 @@ export class AuthService {
   }
 
   logout(): void {
+    // Order matters: the unregister call is bearer-authed, so it has to be
+    // issued while the token is still here. It's fire-and-forget, so this stays
+    // synchronous and sign-out is still instant.
+    this.push.unregister();
     this.tokenStore.clear();
   }
 
@@ -96,6 +102,10 @@ export class AuthService {
    * moment the Cognito user is gone.
    */
   deleteAccount(): Observable<{ deleted: boolean }> {
+    // Before the token dies with the account. A deleted user's device row would
+    // otherwise linger and still be pushed to: Messaging doesn't know the user is
+    // gone, so a peer sending into the old conversation still fires a trigger.
+    this.push.unregister();
     return this.http
       .delete<{ deleted: boolean }>('/auth/account', {
         headers: { Authorization: `Bearer ${this.tokenStore.accessToken}` },

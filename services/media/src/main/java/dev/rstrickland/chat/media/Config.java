@@ -8,6 +8,7 @@ import dev.rstrickland.chat.media.clients.KafkaMediaPublisher;
 import dev.rstrickland.chat.media.clients.S3Storage;
 import dev.rstrickland.chat.media.clients.TokenVerifier;
 import dev.rstrickland.chat.media.core.MediaService;
+import dev.rstrickland.chat.media.clients.KafkaSecurity;
 import java.net.URI;
 import java.util.Properties;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -73,6 +74,7 @@ public final class Config {
     props.put(ProducerConfig.ACKS_CONFIG, "all");
     props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "5000");
     props.put(ProducerConfig.CLIENT_ID_CONFIG, "media");
+    KafkaSecurity.apply(props); // SASL_SSL + AWS_MSK_IAM when KAFKA_AUTH=iam
     Producer<String, String> producer = new KafkaProducer<>(props);
 
     var repository = new DynamoMediaRepository(dynamo, table);

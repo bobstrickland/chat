@@ -58,6 +58,15 @@
       <artifactId>kafka-clients</artifactId>
       <version>3.8.0</version>
     </dependency>
+    <!-- MSK IAM authentication. Supplies the AWS_MSK_IAM SASL mechanism the
+         real cluster requires (terraform/modules/msk: client_broker=TLS +
+         sasl.iam=true); inert until KAFKA_AUTH=iam, so local Redpanda stays
+         plaintext. See clients/KafkaSecurity. -->
+    <dependency>
+      <groupId>software.amazon.msk</groupId>
+      <artifactId>aws-msk-iam-auth</artifactId>
+      <version>2.3.7</version>
+    </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>

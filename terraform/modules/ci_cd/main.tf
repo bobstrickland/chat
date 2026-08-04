@@ -73,13 +73,16 @@ resource "aws_iam_role" "codebuild" {
 data "aws_iam_policy_document" "codebuild_permissions" {
   statement {
     sid = "TerraformStateAccess"
+    # s3:DeleteObject is required, not optional: with S3-native locking
+    # (`use_lockfile = true`) Terraform CREATES a .tflock object to take the lock
+    # and DELETES it to release. Without delete, CI would strand a lock on every
+    # run and the next apply would block. The DynamoDB actions that used to be
+    # here went with the lock table (see terraform/bootstrap).
     actions = [
-      "s3:GetObject", "s3:PutObject", "s3:ListBucket",
-      "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem",
+      "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket",
     ]
     resources = [
       var.state_bucket_arn, "${var.state_bucket_arn}/*",
-      var.state_lock_table_arn,
     ]
   }
   statement {

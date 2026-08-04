@@ -38,3 +38,18 @@ Required for `AUTH_PROVIDER=cognito`: `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID
   extend to select client ID per caller/platform before mobile testing)
 - `postConfirmation` trigger's Profile Service call (Phase 2 of build sequence)
 - Rate limiting on `/auth/mfa/verify` and `/auth/login` (add before any real exposure)
+
+## Secrets (`SECRETS_PROVIDER`)
+
+`env` (default) reads `.env`; `awssm` fetches from AWS Secrets Manager, overriding
+the environment. This service reads **`shared/profile-internal-api-key`** →
+`PROFILE_INTERNAL_API_KEY`.
+
+It's under `shared/`, not `auth/`, because the Profile service verifies the same
+value — one stored secret means caller and verifier can't drift apart on a
+rotation. `terraform/modules/iam` grants that individual secret to exactly these
+two roles (the blanket `secret:{service}/*` grant deliberately doesn't cover it).
+
+Loaded by `clients/secretsLoader.js` into `process.env` before dependencies are
+built. Not `required`: Auth→Profile provisioning is best-effort by design, and
+lazy provisioning covers the gap.

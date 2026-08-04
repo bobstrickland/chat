@@ -105,6 +105,33 @@ services:
       - WS_SHIM_ROUTE_TARGET=http://presence-service:3000
     depends_on: [presence-service]
 
+  # Local API gateway: ONE host for every client, path-routed, mirroring
+  # services/web/proxy.conf.json. Exists so the Android client can use a single
+  # base URL like it will in AWS, instead of seven host:port pairs that only exist
+  # locally. Web keeps using the Angular dev proxy (same routes, same effect).
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: chat-gateway
+    ports:
+      - "8080:80"
+    volumes:
+      - ./local-dev/gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./local-dev/gateway/proxy_common.conf:/etc/nginx/proxy_common.conf:ro
+    # Routes to the host's published ports rather than container DNS — see the
+    # long comment in nginx.conf for why (nginx can't re-resolve a cached
+    # upstream, so a recreated container silently misroutes).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - auth-service
+      - profile-service
+      - messaging-service
+      - presence-service
+      - notification-service
+      - media-service
+      - search-service
+      - ws-shim
+
   # ---- application services ----
   # Uncomment as each service is scaffolded. Each points src/adapters/httpServer.js
   # at the container ports above via env vars in local-env/.env
@@ -142,6 +169,12 @@ services:
     # against a host-run capture server (real push services are external anyway).
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Android push (FCM) needs a Firebase service-account key. Drop the JSON at
+    # secrets/fcm-service-account.json (gitignored), set FCM_ENABLED=true in .env,
+    # then uncomment. Left commented because a bind mount to a missing file makes
+    # Docker create a DIRECTORY there, which then fails to parse as JSON.
+    # volumes:
+    #   - ./secrets/fcm-service-account.json:/run/secrets/fcm-service-account.json:ro
 
   media-service:
     build: ./services/media

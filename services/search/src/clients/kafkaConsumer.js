@@ -1,5 +1,8 @@
 import { Kafka, logLevel } from "kafkajs";
 
+import { kafkaAuthOptions } from "./kafkaAuth.js";
+import { registerCompressionCodecs } from "./kafkaCompression.js";
+
 /**
  * Subscribes to one topic and hands each parsed event to a handler. Used twice
  * (message.sent and search.index), each with its own group so both get every
@@ -12,10 +15,16 @@ import { Kafka, logLevel } from "kafkajs";
  * is the message/user id), so reprocessing the log is harmless.
  */
 export function createIndexConsumer({ brokers, topic, groupId, handler }) {
+  registerCompressionCodecs(); // Snappy — kafkajs only ships GZIP
   const kafka = new Kafka({
     clientId: "search-service",
     brokers: brokers.split(",").map((b) => b.trim()),
-    logLevel: logLevel.NOTHING,
+    // ERROR, not NOTHING: kafkajs reports a crashed consumer / broker
+    // failure at ERROR, and suppressing it meant a wedged consumer looked
+    // like a perfectly healthy service that had silently stopped consuming.
+    logLevel: logLevel.ERROR,
+    // TLS + SASL/OAUTHBEARER when KAFKA_AUTH=iam; nothing when plaintext (local).
+    ...kafkaAuthOptions(),
   });
   const consumer = kafka.consumer({ groupId });
 

@@ -1,5 +1,7 @@
 import { Client } from "@opensearch-project/opensearch";
 
+import { openSearchAuthOptions } from "./openSearchAuth.js";
+
 /**
  * Thin wrapper over the OpenSearch client — the only place the OpenSearch
  * query DSL lives (core/ stays free of it, the clients/ contract).
@@ -15,7 +17,11 @@ import { Client } from "@opensearch-project/opensearch";
  * same doc — the consumer can be at-least-once without creating duplicates.
  */
 export function createOpenSearchClient({ node, messagesIndex, profilesIndex }) {
-  const client = new Client({ node });
+  // SigV4 signing when OPENSEARCH_AUTH=iam; plain HTTP locally (the container
+  // runs with the security plugin disabled). The signer replaces the Connection
+  // and Transport classes, so it must be spread into the constructor here — it
+  // can't be bolted on per request.
+  const client = new Client({ node, ...openSearchAuthOptions() });
 
   const MAPPINGS = {
     [messagesIndex]: {

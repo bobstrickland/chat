@@ -1,5 +1,8 @@
 import { Kafka, logLevel } from "kafkajs";
 
+import { kafkaAuthOptions } from "./kafkaAuth.js";
+import { registerCompressionCodecs } from "./kafkaCompression.js";
+
 /**
  * Publishes a profile onto the `search.index` topic so the Search service can
  * index it for people-search. A generic indexing envelope
@@ -16,10 +19,17 @@ export function createSearchIndexPublisher({ brokers, topic }) {
     return { async publishProfile() {}, async publishProfileDeleted() {} };
   }
 
+  registerCompressionCodecs(); // Snappy — kafkajs only ships GZIP
+
   const kafka = new Kafka({
     clientId: "profile-service",
     brokers: brokers.split(",").map((b) => b.trim()),
-    logLevel: logLevel.NOTHING,
+    // ERROR, not NOTHING: kafkajs reports a crashed consumer / broker
+    // failure at ERROR, and suppressing it meant a wedged consumer looked
+    // like a perfectly healthy service that had silently stopped consuming.
+    logLevel: logLevel.ERROR,
+    // TLS + SASL/OAUTHBEARER when KAFKA_AUTH=iam; nothing when plaintext (local).
+    ...kafkaAuthOptions(),
   });
   const producer = kafka.producer();
   let connected = null; // connect lazily, once

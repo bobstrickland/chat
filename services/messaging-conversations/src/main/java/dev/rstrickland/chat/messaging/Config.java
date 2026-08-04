@@ -11,9 +11,11 @@ import dev.rstrickland.chat.messaging.clients.ReceiptJson;
 import dev.rstrickland.chat.messaging.core.ReceiptBroadcaster;
 import dev.rstrickland.chat.messaging.core.DeletionBroadcaster;
 import dev.rstrickland.chat.messaging.clients.TokenVerifier;
-import dev.rstrickland.chat.messaging.clients.WsShimConnectionPusher;
+import dev.rstrickland.chat.messaging.clients.ConnectionPushers;
+import dev.rstrickland.chat.messaging.clients.SecretsLoader;
 import dev.rstrickland.chat.messaging.core.DeliveryService;
 import dev.rstrickland.chat.messaging.core.MessagingService;
+import dev.rstrickland.chat.messaging.clients.KafkaSecurity;
 import java.net.URI;
 import java.util.Properties;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -70,9 +72,22 @@ public final class Config {
     String notificationTopic = env("TOPIC_NOTIFICATION_TRIGGER", "notification.trigger");
     String jwksUrl = require("COGNITO_JWKS_URL");
     String presenceUrl = require("PRESENCE_SERVICE_URL");
-    String presenceKey = require("PRESENCE_INTERNAL_API_KEY");
-    String wsEndpoint = require("WS_SHIM_ENDPOINT");
+    // Secrets Manager when SECRETS_PROVIDER=awssm, else the .env value. Shared
+    // with the Presence service, which verifies the same key — one stored value,
+    // so caller and verifier can't drift apart.
+    String presenceKey =
+        SecretsLoader.resolve(
+            env("PRESENCE_INTERNAL_KEY_SECRET_ID", "shared/presence-internal-api-key"),
+            "apiKey",
+            require("PRESENCE_INTERNAL_API_KEY"));
+    // WS_SHIM_ENDPOINT is deliberately NOT require()d: it doesn't exist in AWS.
+    // Whichever value the selected provider actually needs is validated by the
+    // pusher itself, so a missing one still fails fast at startup with a message
+    // naming the right variable.
+    String wsProvider = env(ConnectionPushers.ENV_VAR, "shim");
+    String wsEndpoint = System.getenv("WS_SHIM_ENDPOINT");
     String wsManagePath = env("WS_SHIM_MANAGE_CONNECTIONS_PATH", "/@connections");
+    String wsManagementEndpoint = System.getenv("WS_MANAGEMENT_ENDPOINT");
     String deliveryGroup = env("MESSAGING_DELIVERY_GROUP", "messaging-delivery");
     int port = Integer.parseInt(env("PORT", "3000"));
 
@@ -89,6 +104,7 @@ public final class Config {
     props.put(ProducerConfig.ACKS_CONFIG, "all");
     props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "5000");
     props.put(ProducerConfig.CLIENT_ID_CONFIG, "messaging-conversations");
+    KafkaSecurity.apply(props); // SASL_SSL + AWS_MSK_IAM when KAFKA_AUTH=iam
     Producer<String, String> producer = new KafkaProducer<>(props);
 
     MessageJson json = new MessageJson();
@@ -96,7 +112,9 @@ public final class Config {
     var publisher = new KafkaMessagePublisher(producer, topic);
     var verifier = new JwksTokenVerifier(jwksUrl);
     var lookup = new PresenceConnectionLookup(presenceUrl, presenceKey);
-    var pusher = new WsShimConnectionPusher(wsEndpoint, wsManagePath);
+    var pusher =
+        ConnectionPushers.create(
+            wsProvider, wsEndpoint, wsManagePath, region, wsManagementEndpoint);
 
     var notificationPublisher = new KafkaNotificationPublisher(producer, notificationTopic);
 

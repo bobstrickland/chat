@@ -1,46 +1,23 @@
 # ---------------------------------------------------------------------------
-# NOTE ON BOOTSTRAP ORDERING:
-# The S3 state bucket + DynamoDB lock table referenced in backend.tf must
-# exist BEFORE `terraform init` can use them. Apply this file once with a
-# local/no backend (comment out the backend block), or via `bootstrap/`
-# (not included here) before switching to the S3 backend. Included below
-# for completeness / re-creation reference, not first-run ordering.
+# The S3 state bucket + DynamoDB lock table that backend.tf points at are NOT
+# declared here — they live in `terraform/bootstrap/`, applied once by hand with
+# local state. They used to be in this file, which meant this config declared
+# the bucket it was simultaneously storing its state in: a first apply required
+# commenting out the backend block, applying, uncommenting, and re-initing.
+# Moving them removed that cycle. Don't reintroduce them here.
+#
+# CI still needs the bucket ARN (the CodeBuild role reads/writes state), so it's
+# looked up as a data source instead of managed here. A data source, not remote
+# state: this config's own backend already points at that bucket, so if the
+# lookup fails the init would have failed first — there is nothing to gain from
+# an extra indirection. There is no lock TABLE to look up: locking is
+# S3-native (`use_lockfile`), see backend.tf.
 # ---------------------------------------------------------------------------
 
-resource "aws_s3_bucket" "terraform_state" {
+data "aws_s3_bucket" "terraform_state" {
   bucket = "chat-app-terraform-state-${var.account_id}"
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
-
-resource "aws_s3_bucket_versioning" "terraform_state" {
-  bucket = aws_s3_bucket.terraform_state.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
-  bucket = aws_s3_bucket.terraform_state.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "aws:kms"
-    }
-  }
-}
-
-resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "chat-app-terraform-locks"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-}
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # KMS — shared encryption key for DynamoDB / S3 / Secrets across services
@@ -120,7 +97,12 @@ module "cognito" {
   auth_domain_prefix            = "dev-auth-chat-rstrickland-dev"
   custom_domain                 = "dev-auth.chat.rstrickland.dev"
   acm_certificate_arn_us_east_1 = module.dns_acm.certificate_arn
-  mobile_callback_urls          = ["chatapp://callback"]
+  # MUST match the Android app's ApiConfig.OAUTH_REDIRECT and the scheme its
+  # manifest intent-filter catches — and it is what the LIVE pool already has
+  # registered. This said "chatapp://callback" (a value nothing in the client
+  # ever used), so applying this config would have silently broken Google
+  # sign-in on Android. Change both sides together or not at all.
+  mobile_callback_urls = ["myapp://callback"]
   # localhost entries let the Angular dev client (:4200) complete the Hosted-UI
   # OAuth redirect during local development; the dev-app.* entries are the real
   # deployed client.
@@ -293,17 +275,16 @@ resource "aws_route53_record" "auth" {
 # ---------------------------------------------------------------------------
 
 module "ci_cd" {
-  source               = "../../modules/ci_cd"
-  name_prefix          = var.name_prefix
-  account_id           = var.account_id
-  region               = var.region
-  github_org           = var.github_org
-  github_repo          = var.github_repo
-  vpc_id               = module.vpc.vpc_id
-  private_subnet_ids   = module.vpc.private_subnet_ids
-  state_bucket_arn     = aws_s3_bucket.terraform_state.arn
-  state_lock_table_arn = aws_dynamodb_table.terraform_locks.arn
-  tags                 = local.tags
+  source             = "../../modules/ci_cd"
+  name_prefix        = var.name_prefix
+  account_id         = var.account_id
+  region             = var.region
+  github_org         = var.github_org
+  github_repo        = var.github_repo
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  state_bucket_arn   = data.aws_s3_bucket.terraform_state.arn
+  tags               = local.tags
 }
 
 locals {
@@ -311,4 +292,44 @@ locals {
     Project     = "chat-app"
     Environment = "dev"
   }
+}
+
+# ---------------------------------------------------------------------------
+# Secrets Manager — the four real secrets the services read at startup
+# (SECRETS_PROVIDER=awssm). See CLAUDE.md "Secrets".
+#
+# CONTAINERS ONLY, DELIBERATELY. There is no `aws_secretsmanager_secret_version`
+# here, because that resource writes the plaintext value into Terraform state —
+# the exact problem that made the Cognito Google client secret worth migrating off
+# a laptop. Populate the values out-of-band, once, and Terraform never sees them:
+#
+#   aws secretsmanager put-secret-value --secret-id notification/vapid \
+#     --secret-string '{"publicKey":"…","privateKey":"…","subject":"mailto:…"}'
+#
+# Names, not ARNs, are what the services ask for; the `{service}/…` and `shared/…`
+# prefixes are what modules/iam scopes the role policies to, so renaming one here
+# means editing that module too.
+# ---------------------------------------------------------------------------
+
+locals {
+  app_secrets = {
+    "notification/vapid"               = "Web Push VAPID keypair + subject (publicKey/privateKey/subject)"
+    "notification/fcm-service-account" = "Firebase service-account JSON for FCM HTTP v1 (stored verbatim)"
+    "shared/profile-internal-api-key"  = "Auth -> Profile internal provisioning key (apiKey); read by both roles"
+    "shared/presence-internal-api-key" = "Messaging -> Presence connection-lookup key (apiKey); read by both roles"
+  }
+}
+
+resource "aws_secretsmanager_secret" "app" {
+  for_each = local.app_secrets
+
+  name        = each.key
+  description = each.value
+  kms_key_id  = aws_kms_key.app.arn
+
+  # Long enough to undo a mistaken delete, short enough not to block recreating a
+  # secret under the same name during early iteration.
+  recovery_window_in_days = 7
+
+  tags = local.tags
 }

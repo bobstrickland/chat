@@ -1,6 +1,7 @@
 import express from "express";
 import crypto from "node:crypto";
 import { getDependencies, getInternalApiKey } from "../config.js";
+import { loadSecrets } from "../secrets.js";
 import { provisionProfile } from "../core/provisionProfile.js";
 import { getProfile } from "../core/getProfile.js";
 import { getMyProfile } from "../core/getMyProfile.js";
@@ -13,6 +14,14 @@ app.use(express.json());
 
 // Module-level bundle is a warm-process perf bonus only (Fargate target).
 // Nothing here depends on reuse for correctness — per CLAUDE.md.
+// Secrets BEFORE dependencies — config reads them straight from the
+// environment. No-op unless SECRETS_PROVIDER=awssm. Top-level await (ESM).
+const secrets = await loadSecrets();
+if (secrets.provider === "awssm") {
+  // eslint-disable-next-line no-console
+  console.log(`[secrets] loaded from Secrets Manager: ${secrets.loaded.join(", ") || "none"}`);
+}
+
 const deps = getDependencies();
 const internalApiKey = getInternalApiKey();
 

@@ -3,16 +3,22 @@
  * device of the offline recipient.
  *
  * Platform branches (CLAUDE.md: `platform` drives the mechanism):
- *   - web  → Web Push / VAPID (implemented)
- *   - ios/android → APNs/FCM (deferred to the mobile phase — logged and skipped)
+ *   - web     → Web Push / VAPID  (webPushSender)
+ *   - android → FCM HTTP v1       (fcmSender)
+ *   - ios     → APNs — no iOS client per the rules, so skipped
  *
- * A dead web subscription (push endpoint 404/410) is pruned so we stop trying it.
+ * A dead token — web push endpoint 404/410, or FCM reporting the registration
+ * token unregistered — is pruned so we stop trying it. Both senders report that
+ * the same way (`{ gone: true }`), which is why one loop covers both.
  *
- * @param {{ deviceTokenRepository: object, webPushSender: object }} deps
- * @param {{ recipientId: string, senderId: string, body: string, conversationId: string }} event
+ * @param {{ deviceTokenRepository: object, webPushSender: object, fcmSender?: object }} deps
+ * @param {{ recipientId: string, senderId: string, body: string, conversationId: string, messageId?: string, sentAt?: string }} event
  * @returns {Promise<{ devices:number, sent:number, pruned:number, skipped:number, failed:number, errors:string[] }>}
  */
-export async function sendPushToRecipient({ deviceTokenRepository, webPushSender }, event) {
+export async function sendPushToRecipient(
+  { deviceTokenRepository, webPushSender, fcmSender },
+  event
+) {
   if (!event.recipientId) {
     throw new Error("recipientId is required");
   }
@@ -21,7 +27,12 @@ export async function sendPushToRecipient({ deviceTokenRepository, webPushSender
   const payload = {
     title: "New message",
     body: preview(event.body),
-    data: { conversationId: event.conversationId, senderId: event.senderId },
+    data: {
+      conversationId: event.conversationId,
+      senderId: event.senderId,
+      messageId: event.messageId,
+      sentAt: event.sentAt,
+    },
   };
 
   let sent = 0;
@@ -31,12 +42,13 @@ export async function sendPushToRecipient({ deviceTokenRepository, webPushSender
   const errors = [];
 
   for (const device of devices) {
-    if (device.platform !== "web") {
-      // APNs/FCM path not built yet.
+    const sender = senderFor(device.platform, { webPushSender, fcmSender });
+    if (!sender) {
+      // iOS (no client), or android on a deployment with no FCM credentials.
       skipped += 1;
       continue;
     }
-    const result = await webPushSender.send(device.subscription, payload);
+    const result = await sender.send(device.subscription, payload);
     if (result.ok) {
       sent += 1;
     } else if (result.gone) {
@@ -51,6 +63,18 @@ export async function sendPushToRecipient({ deviceTokenRepository, webPushSender
   }
 
   return { devices: devices.length, sent, pruned, skipped, failed, errors };
+}
+
+/**
+ * The sender for a platform, or null when that platform can't be pushed to right
+ * now. An unconfigured FCM sender counts as "can't" — a missing Firebase project
+ * is a deployment state, not a per-message error, so it must not inflate the
+ * failure count on every trigger.
+ */
+function senderFor(platform, { webPushSender, fcmSender }) {
+  if (platform === "web") return webPushSender ?? null;
+  if (platform === "android") return fcmSender?.enabled ? fcmSender : null;
+  return null; // ios — APNs not built
 }
 
 /** Keep the push body short — it shows in a system notification, not a chat pane. */

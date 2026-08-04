@@ -29,8 +29,11 @@ public final class DevMediaDns implements Dns {
     @NonNull
     @Override
     public List<InetAddress> lookup(@NonNull String hostname) throws UnknownHostException {
-        if ("localhost".equalsIgnoreCase(hostname) || "127.0.0.1".equals(hostname)) {
-            return Arrays.asList(InetAddress.getAllByName(ApiConfig.HOST)); // 10.0.2.2
+        boolean rewritable = "localhost".equalsIgnoreCase(hostname) || "127.0.0.1".equals(hostname);
+        // DEV_BLOB_HOST is empty in a release build, so this whole hack disappears
+        // there and a real HTTPS media host resolves normally.
+        if (rewritable && !ApiConfig.DEV_BLOB_HOST.isEmpty()) {
+            return Arrays.asList(InetAddress.getAllByName(ApiConfig.DEV_BLOB_HOST)); // 10.0.2.2
         }
         return Dns.SYSTEM.lookup(hostname);
     }

@@ -4,4 +4,10 @@
     <string name="nav_open">Open navigation</string>
     <string name="nav_close">Close navigation</string>
     <string name="logo_desc">Hijaca logo</string>
+
+    <!-- Push notifications -->
+    <string name="channel_messages_name">Messages</string>
+    <string name="channel_messages_desc">New chat messages while you\'re away</string>
+    <string name="push_default_title">New message</string>
+    <string name="push_default_body">You have a new message</string>
 </resources>

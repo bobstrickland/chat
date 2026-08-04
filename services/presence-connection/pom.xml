@@ -47,10 +47,25 @@
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>dynamodb</artifactId>
     </dependency>
+    <!-- Secrets Manager — internal API key resolution (clients/SecretsLoader).
+         Version comes from the AWS SDK BOM. -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>secretsmanager</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
       <version>${kafka.version}</version>
+    </dependency>
+    <!-- MSK IAM authentication. Supplies the AWS_MSK_IAM SASL mechanism the
+         real cluster requires (terraform/modules/msk: client_broker=TLS +
+         sasl.iam=true); inert until KAFKA_AUTH=iam, so local Redpanda stays
+         plaintext. See clients/KafkaSecurity. -->
+    <dependency>
+      <groupId>software.amazon.msk</groupId>
+      <artifactId>aws-msk-iam-auth</artifactId>
+      <version>2.3.7</version>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>

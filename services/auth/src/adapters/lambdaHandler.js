@@ -1,4 +1,5 @@
 import { getDependencies } from "../config.js";
+import { loadSecrets } from "../secrets.js";
 import { register } from "../core/register.js";
 import { login } from "../core/login.js";
 import { refreshToken } from "../core/refreshToken.js";
@@ -12,6 +13,20 @@ import { deleteAccount } from "../core/deleteAccount.js";
 // correctness. This module-level instance is a warm-start perf bonus only —
 // every call path below still works correctly on a cold start.
 let deps;
+
+/**
+ * Secrets are fetched on the first invocation of a container and reused while it
+ * lives; correctness never depends on that reuse, since a cold start fetches
+ * again. The PROMISE is memoized (not a boolean) so two concurrent invocations
+ * can't both fetch.
+ */
+let secretsReady;
+
+async function ready() {
+  secretsReady ??= loadSecrets();
+  await secretsReady;
+  await ready();
+}
 
 const ROUTES = {
   "POST /auth/register": register,
@@ -29,7 +44,7 @@ const ROUTES = {
  * wraps the result — no business logic lives here.
  */
 export const handler = async (event) => {
-  deps ??= getDependencies();
+  await ready();
 
   if (event.requestContext?.http?.path === "/health") {
     return { statusCode: 200, body: JSON.stringify({ status: "ok" }) };

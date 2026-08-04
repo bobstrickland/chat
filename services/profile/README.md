@@ -100,3 +100,30 @@ shared secret, and the synchronous coupling together.
 docker compose up -d --build profile-service   # :3002 on the host
 npm test                                       # integration; needs dynamodb-local
 ```
+
+## Kafka auth (`KAFKA_AUTH`)
+
+`plaintext` (default, and when unset) = local Redpanda, no TLS, no auth.
+`iam` = TLS + SASL IAM, which real MSK requires (`client_broker=TLS` +
+`sasl.iam=true`), so a plaintext client cannot connect to it at all. Set it to
+`iam` for any AWS deployment; credentials come from the default AWS chain (the
+task/Lambda role). Implementation: `clients/kafkaAuth` — SASL/OAUTHBEARER with a presigned SigV4 token, applied to the `search.index` producer.
+
+## Kafka compression + log level
+
+`clients/kafkaCompression.js` registers `kafkajs-snappy` for the `search.index` producer: kafkajs ships
+GZIP only, and a Snappy record was previously a permanent poison pill (crash → restart →
+re-read → crash, group `Empty`, consumption silently dead). Pure JS, so nothing native
+enters a Lambda package. The client also runs at `logLevel.ERROR` rather than `NOTHING`,
+so a crashed consumer or broker failure is actually visible. See
+`services/search/README.md` for the full story.
+
+## Secrets (`SECRETS_PROVIDER`)
+
+`env` (default) reads `.env`; `awssm` fetches from AWS Secrets Manager, overriding
+the environment. This service reads **`shared/profile-internal-api-key`** →
+`PROFILE_INTERNAL_API_KEY`, the same secret Auth sends — see
+`services/auth/README.md`.
+
+Not `required`: the key guards only the internal provisioning endpoint, so a
+failure to load leaves every bearer-authed route working and fails just that one.

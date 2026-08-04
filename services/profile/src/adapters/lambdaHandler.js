@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { getDependencies, getInternalApiKey } from "../config.js";
+import { loadSecrets } from "../secrets.js";
 import { provisionProfile } from "../core/provisionProfile.js";
 import { getProfile } from "../core/getProfile.js";
 import { getMyProfile } from "../core/getMyProfile.js";
@@ -11,6 +12,20 @@ import { addContact, removeContact, listContacts } from "../core/contacts.js";
 // correctness. These module-level values are a warm-start perf bonus only —
 // every path below still works on a cold start.
 let deps;
+
+/**
+ * Secrets are fetched on the first invocation of a container and reused while it
+ * lives; correctness never depends on that reuse, since a cold start fetches
+ * again. The PROMISE is memoized (not a boolean) so two concurrent invocations
+ * can't both fetch.
+ */
+let secretsReady;
+
+async function ready() {
+  secretsReady ??= loadSecrets();
+  await secretsReady;
+  await ready();
+}
 let internalApiKey;
 
 const STATUS = { NOT_FOUND: 404, FORBIDDEN: 403 };
@@ -54,7 +69,7 @@ function assertInternal(event) {
  * result — no business logic lives here.
  */
 export const handler = async (event) => {
-  deps ??= getDependencies();
+  await ready();
   internalApiKey ??= getInternalApiKey();
 
   const method = event.requestContext?.http?.method;

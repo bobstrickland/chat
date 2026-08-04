@@ -61,3 +61,11 @@ docker compose up -d --build media-service     # :3006
 Config (`.env`): `MEDIA_METADATA_TABLE`, `S3_ENDPOINT`, `MEDIA_S3_PUBLIC_ENDPOINT`,
 `MEDIA_BUCKET`, `AWS_ACCESS_KEY_ID_S3` / `AWS_SECRET_ACCESS_KEY_S3`,
 `COGNITO_JWKS_URL`, `DYNAMODB_ENDPOINT` (local), `AWS_REGION`, `PORT`.
+
+## Kafka auth (`KAFKA_AUTH`)
+
+`plaintext` (default, and when unset) = local Redpanda, no TLS, no auth.
+`iam` = TLS + SASL IAM, which real MSK requires (`client_broker=TLS` +
+`sasl.iam=true`), so a plaintext client cannot connect to it at all. Set it to
+`iam` for any AWS deployment; credentials come from the default AWS chain (the
+task/Lambda role). Implementation: `clients/KafkaSecurity` (AWS_MSK_IAM mechanism), applied to the producer and the transcode worker consumer.

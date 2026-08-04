@@ -1,6 +1,9 @@
 // Top-level build file. Plugin versions declared here, applied in :app.
 plugins {
     id 'com.android.application' version '9.1.1' apply false
+    // Firebase Cloud Messaging (push). Declared here, applied in :app ONLY when a
+    // google-services.json is present — see app/build.gradle for why.
+    id 'com.google.gms.google-services' version '4.5.0' apply false
 }
 ext {
     defaultVersionCode = 0.1

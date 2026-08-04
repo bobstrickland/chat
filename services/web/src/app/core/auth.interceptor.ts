@@ -1,4 +1,4 @@
-import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
+import { HttpContextToken, HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, switchMap, throwError } from 'rxjs';
@@ -17,6 +17,17 @@ import { AuthService } from './auth.service';
  * `/auth/*` requests are skipped entirely: they carry no bearer, and letting
  * a 401 from /auth/refresh trigger another refresh would be an infinite loop.
  */
+
+/**
+ * Opt a request out of job 2 (the refresh-and-retry). Set it on calls made
+ * *during teardown* — a 401 there is expected, and recovering from it would
+ * resurrect the session we're in the middle of ending. Concretely: logout fires
+ * `DELETE /device-tokens/{id}` while the refresh token is still in hand, so
+ * without this the failure path would refresh, fail, call logout again, and
+ * loop. The bearer is still attached; only the retry is suppressed.
+ */
+export const SKIP_AUTH_REFRESH = new HttpContextToken<boolean>(() => false);
+
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const tokenStore = inject(TokenStore);
   const auth = inject(AuthService);
@@ -33,8 +44,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(authed).pipe(
     catchError((err: HttpErrorResponse) => {
-      // Only a 401 with a refresh token on hand is recoverable.
-      if (err.status !== 401 || !tokenStore.refreshToken) {
+      // Only a 401 with a refresh token on hand is recoverable — and only if the
+      // caller didn't opt out (teardown calls, see SKIP_AUTH_REFRESH).
+      if (req.context.get(SKIP_AUTH_REFRESH) || err.status !== 401 || !tokenStore.refreshToken) {
         return throwError(() => err);
       }
 

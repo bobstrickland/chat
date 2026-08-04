@@ -6,6 +6,8 @@ import dev.rstrickland.chat.presence.clients.JwksTokenVerifier;
 import dev.rstrickland.chat.presence.clients.KafkaEventPublisher;
 import dev.rstrickland.chat.presence.clients.TokenVerifier;
 import dev.rstrickland.chat.presence.core.PresenceService;
+import dev.rstrickland.chat.presence.clients.KafkaSecurity;
+import dev.rstrickland.chat.presence.clients.SecretsLoader;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Properties;
@@ -62,7 +64,12 @@ public final class Config {
     String brokers = require("KAFKA_BROKERS");
     String topic = env("TOPIC_CONNECTION_STATE_CHANGED", "connection.state.changed");
     String jwksUrl = require("COGNITO_JWKS_URL");
-    String internalApiKey = require("PRESENCE_INTERNAL_API_KEY");
+    // Same shared secret the Messaging service sends; see SecretsLoader.
+    String internalApiKey =
+        SecretsLoader.resolve(
+            env("PRESENCE_INTERNAL_KEY_SECRET_ID", "shared/presence-internal-api-key"),
+            "apiKey",
+            require("PRESENCE_INTERNAL_API_KEY"));
     long ttlSeconds = Long.parseLong(env("CONNECTION_TTL_SECONDS", "7200"));
     int port = Integer.parseInt(env("PORT", "3000"));
 
@@ -82,6 +89,7 @@ public final class Config {
     props.put(ProducerConfig.ACKS_CONFIG, "all");
     props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "5000");
     props.put(ProducerConfig.CLIENT_ID_CONFIG, "presence-connection");
+    KafkaSecurity.apply(props); // SASL_SSL + AWS_MSK_IAM when KAFKA_AUTH=iam
     Producer<String, String> producer = new KafkaProducer<>(props);
 
     var repository = new DynamoConnectionRepository(dynamo, table);

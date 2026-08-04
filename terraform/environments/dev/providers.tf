@@ -30,10 +30,13 @@ provider "aws" {
 # or via a bastion/VPN if applying locally.
 provider "kafka" {
   bootstrap_servers = split(",", module.msk.bootstrap_brokers_sasl_iam)
-  tls_enabled        = true
+  tls_enabled       = true
 
-  sasl {
-    mechanism  = "aws-iam"
-    aws_region = var.region
-  }
+  # Flat attributes, not a `sasl {}` block — that block form isn't in the
+  # provider's schema and made `terraform validate` fail ("Blocks of type sasl
+  # are not expected here"). MSK IAM auth maps to the "aws-iam" mechanism plus
+  # the region to sign for; credentials come from the ambient AWS chain (the
+  # CodeBuild role), same as the aws provider.
+  sasl_mechanism  = "aws-iam"
+  sasl_aws_region = var.region
 }

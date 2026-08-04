@@ -72,3 +72,22 @@ the same core/adapters instinct as the backend services.
 (multi-stage → nginx) packages that bundle. In production the bundle sits behind
 CloudFront/API Gateway, which handles API routing — the image itself only serves
 static files and is **not** used for local dev.
+
+## Environment configuration
+
+`src/environments/environment.ts` (dev) and `environment.prod.ts` (deployed),
+swapped by angular.json `fileReplacements` on the `production` configuration.
+
+Only three values live there — `wsUrl`, `hostedUiDomain`, `webClientId` —
+consumed by `core/realtime.service.ts` and `core/auth-config.ts`. **REST calls are
+deliberately absent**: they're origin-relative (`/auth/…`, `/profiles/…`), proxied
+by `proxy.conf.json` in dev and by CloudFront behaviours once deployed, so they
+need no base URL in either place. A WebSocket URL can't be origin-relative and
+Cognito's Hosted UI is on its own domain — hence exactly those three.
+
+Verified both ways: a production build contains `wss://dev-ws…` and NOT
+`ws://localhost:8090`; a development build is the reverse.
+
+**`dev-ws.chat.rstrickland.dev` does not exist yet** — there is no API Gateway
+WebSocket API in Terraform. The prod file records the intended target.
+

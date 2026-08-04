@@ -24,6 +24,15 @@ export async function registerDevice({ deviceTokenRepository }, input) {
   if (input.platform === "web" && !input.subscription.endpoint) {
     throw new Error("web subscription must include an endpoint");
   }
+  // A mobile subscription is the platform's registration token (FCM/APNs).
+  // Validated here rather than at send time so a broken client registration
+  // fails loudly at the point it's made, not silently hours later on a push.
+  if (
+    (input.platform === "android" || input.platform === "ios") &&
+    !input.subscription.token
+  ) {
+    throw new Error(`${input.platform} subscription must include a token`);
+  }
 
   return deviceTokenRepository.upsert({
     userId: input.userId,

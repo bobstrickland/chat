@@ -75,3 +75,54 @@ Needs (`.env`): `CONVERSATIONS_TABLE`, `KAFKA_BROKERS`, `TOPIC_MESSAGE_SENT`,
 `COGNITO_JWKS_URL`, `PRESENCE_SERVICE_URL`, `PRESENCE_INTERNAL_API_KEY`,
 `WS_SHIM_ENDPOINT`, `WS_SHIM_MANAGE_CONNECTIONS_PATH`, `DYNAMODB_ENDPOINT` (local),
 `AWS_REGION`, `PORT`.
+
+## Kafka auth (`KAFKA_AUTH`)
+
+`plaintext` (default, and when unset) = local Redpanda, no TLS, no auth.
+`iam` = TLS + SASL IAM, which real MSK requires (`client_broker=TLS` +
+`sasl.iam=true`), so a plaintext client cannot connect to it at all. Set it to
+`iam` for any AWS deployment; credentials come from the default AWS chain (the
+task/Lambda role). Implementation: `clients/KafkaSecurity` (AWS_MSK_IAM mechanism), applied to the producer and the delivery consumer.
+
+## WebSocket push provider (`WS_PROVIDER`)
+
+Delivery, receipts and deletions all push frames through one `core/ConnectionPusher`.
+Two implementations, selected by `clients/ConnectionPushers.create`:
+
+| `WS_PROVIDER` | Implementation | Needs |
+|---|---|---|
+| `shim` (default, unset) | `clients/WsShimConnectionPusher` | `WS_SHIM_ENDPOINT`, `WS_SHIM_MANAGE_CONNECTIONS_PATH` |
+| `apigateway` | `clients/ApiGatewayConnectionPusher` | `WS_MANAGEMENT_ENDPOINT`, `AWS_REGION` |
+
+`WS_MANAGEMENT_ENDPOINT` is the **HTTPS management** endpoint of the WebSocket API and
+stage — `https://{api-id}.execute-api.{region}.amazonaws.com/{stage}` — not the `wss://`
+URL clients connect to. The SDK appends `/@connections/{connectionId}`. Passing a `wss://`
+URL is rejected at startup, because otherwise it surfaces as opaque 403s at push time.
+
+Needs `execute-api:ManageConnections`, already granted by `terraform/modules/iam`
+(`ws_manage_connections`).
+
+Notes:
+
+- **`WS_SHIM_ENDPOINT` is not `require()`d** — it doesn't exist in AWS. Each provider
+  validates its own inputs, so a missing variable still fails fast naming the right one.
+- An unrecognised `WS_PROVIDER` throws at startup rather than defaulting to `shim`. Failed
+  pushes are deliberately swallowed (`push` returns false so one dead connection can't break
+  a fan-out), so a typo would otherwise look like intermittently missing messages.
+- Only the AWS client maps `GoneException` → `false`. A stale presence row is **Presence's**
+  to clean up — it owns that table and it has a TTL; messaging must not write it.
+- The HTTP/1.1 pinning in the shim client is a ws-shim quirk (its Node server misreads the
+  JDK client's h2c upgrade header) and deliberately has no counterpart in the AWS client.
+
+## Secrets (`SECRETS_PROVIDER`)
+
+`env` (default, incl. blank) uses the `.env` value; `awssm` reads
+**`shared/presence-internal-api-key`** from AWS Secrets Manager (field `apiKey`)
+and falls back to the environment if it can't. This service sends that key.
+
+One stored value shared by both ends, so a rotation can't leave caller and
+verifier disagreeing; `terraform/modules/iam` grants that individual secret to
+exactly these two roles. Implementation: `clients/SecretsLoader` (the Java
+counterpart to the Node services' `clients/secretsLoader.js`, same env switch).
+Resolution happens once at startup, so a rotated secret needs a restart.
+

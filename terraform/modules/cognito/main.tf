@@ -1,5 +1,5 @@
 locals {
-  federation_enabled = var.google_client_id != "" || var.apple_client_id != ""
+  federation_enabled      = var.google_client_id != "" || var.apple_client_id != ""
   base_identity_providers = ["COGNITO"]
   identity_providers = concat(
     local.base_identity_providers,
@@ -12,7 +12,7 @@ resource "aws_cognito_user_pool" "this" {
   name = "${var.name_prefix}-user-pool"
 
   # Email is the only identity — no phone/username signup
-  username_attributes     = ["email"]
+  username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
   password_policy {
@@ -41,10 +41,10 @@ resource "aws_cognito_user_pool" "this" {
   }
 
   schema {
-    name                     = "email"
-    attribute_data_type      = "String"
-    required                 = true
-    mutable                  = true
+    name                = "email"
+    attribute_data_type = "String"
+    required            = true
+    mutable             = true
     string_attribute_constraints {
       min_length = 1
       max_length = 256
@@ -69,13 +69,32 @@ resource "aws_cognito_identity_provider" "google" {
 
   provider_details = {
     client_id        = var.google_client_id
-    client_secret     = var.google_client_secret
+    client_secret    = var.google_client_secret
     authorize_scopes = "email openid profile"
   }
 
   attribute_mapping = {
     email    = "email"
     username = "sub"
+  }
+
+  # Cognito fills this map out with Google's OAuth endpoints on create —
+  # authorize_url, token_url, oidc_issuer, attributes_url,
+  # attributes_url_add_attributes, token_request_method — none of which are
+  # declared above. Without this, every plan wants to null all six, and an
+  # unwitting apply rewrites a working live IdP (plan showed "1 to change" from
+  # the moment federation was applied).
+  #
+  # Ignoring rather than declaring them: they're Google's endpoints, owned by
+  # Google and supplied by Cognito. Pinning them here means they rot silently
+  # the day Google moves one.
+  #
+  # Cost of this: a real change to client_id/client_secret is ignored too. Those
+  # are set once, so that's an acceptable trade — but if the Google secret is
+  # ever ROTATED, comment this block out for that one apply (or taint the
+  # resource), then put it back.
+  lifecycle {
+    ignore_changes = [provider_details]
   }
 }
 

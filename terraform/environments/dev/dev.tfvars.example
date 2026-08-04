@@ -1,0 +1,27 @@
+# Template for dev.tfvars. Copy to dev.tfvars and fill in.
+#
+#   cp dev.tfvars.example dev.tfvars
+#
+# dev.tfvars is gitignored — it is where real OAuth credentials get typed, and
+# this repo is public. Never commit it, and never add secrets to THIS file.
+# `sensitive = true` on the variables below only redacts Terraform CLI output;
+# it does nothing for git.
+
+region          = "us-east-1"
+account_id      = "721131331297"
+name_prefix     = "chat-dev"
+root_domain     = "rstrickland.dev"
+wildcard_domain = "*.chat.rstrickland.dev"
+
+github_org  = "REPLACE_ME"
+github_repo = "REPLACE_ME"
+
+# Populate once registered with the Google / Apple developer consoles.
+# Setting either client id flips `federation_enabled` in modules/cognito,
+# which turns on callback_urls, OAuth scopes, and identity providers together.
+google_client_id     = ""
+google_client_secret = "" # SECRET
+apple_client_id      = ""
+apple_team_id        = ""
+apple_key_id         = ""
+apple_private_key    = "" # SECRET — .p8 contents

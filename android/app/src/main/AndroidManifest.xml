@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Runtime-requested on API 33+ (MainActivity); implicitly granted below that. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".ChatApp"
@@ -31,8 +33,31 @@
             </intent-filter>
         </activity>
 
+        <!-- singleTop: tapping a push while the app is already open delivers the
+             intent to the running instance (onNewIntent) instead of stacking a
+             second MainActivity. -->
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTop"
             android:exported="false" />
+
+        <!-- FCM push. Inert unless google-services.json was present at build time. -->
+        <service
+            android:name=".push.ChatMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Used by Play services when IT draws the notification (app backgrounded
+             or killed) — must match what Notifications.showMessage uses so the two
+             paths look identical, and must name a channel the app has created. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_chat" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="messages" />
     </application>
 </manifest>

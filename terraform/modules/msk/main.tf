@@ -28,7 +28,7 @@ resource "aws_security_group" "msk" {
 
 resource "aws_msk_cluster" "this" {
   cluster_name           = "${var.name_prefix}-msk"
-  kafka_version           = var.kafka_version
+  kafka_version          = var.kafka_version
   number_of_broker_nodes = var.number_of_broker_nodes
 
   broker_node_group_info {
@@ -66,7 +66,7 @@ resource "aws_msk_cluster" "this" {
 resource "kafka_topic" "message_sent" {
   name               = "message.sent"
   replication_factor = var.number_of_broker_nodes >= 3 ? 3 : var.number_of_broker_nodes
-  partitions          = 6
+  partitions         = 6
   config = {
     "retention.ms" = "604800000" # 7 days
   }
@@ -75,7 +75,7 @@ resource "kafka_topic" "message_sent" {
 resource "kafka_topic" "connection_state_changed" {
   name               = "connection.state.changed"
   replication_factor = var.number_of_broker_nodes >= 3 ? 3 : var.number_of_broker_nodes
-  partitions          = 6
+  partitions         = 6
   config = {
     "retention.ms" = "86400000" # 1 day — ephemeral state
   }
@@ -84,7 +84,7 @@ resource "kafka_topic" "connection_state_changed" {
 resource "kafka_topic" "notification_trigger" {
   name               = "notification.trigger"
   replication_factor = var.number_of_broker_nodes >= 3 ? 3 : var.number_of_broker_nodes
-  partitions          = 3
+  partitions         = 3
   config = {
     "retention.ms" = "259200000" # 3 days
   }
@@ -93,7 +93,7 @@ resource "kafka_topic" "notification_trigger" {
 resource "kafka_topic" "search_index" {
   name               = "search.index"
   replication_factor = var.number_of_broker_nodes >= 3 ? 3 : var.number_of_broker_nodes
-  partitions          = 3
+  partitions         = 3
   config = {
     "retention.ms" = "604800000" # 7 days
   }

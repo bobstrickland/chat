@@ -1,9 +1,14 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
 import { Observable, Subject, filter } from 'rxjs';
 import { TokenStore } from './token-store';
+import { environment } from '../../environments/environment';
 
-/** Local ws-shim endpoint (stands in for API Gateway WebSocket). */
-const WS_URL = 'ws://localhost:8090';
+/**
+ * ws-shim locally, the API Gateway WebSocket API once deployed — see
+ * `src/environments/`. A WebSocket URL can't be origin-relative, which is why
+ * this one value has to be configured while the REST calls don't.
+ */
+const WS_URL = environment.wsUrl;
 
 type ConnState = 'offline' | 'connecting' | 'online';
 

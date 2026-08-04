@@ -1,5 +1,6 @@
 import express from "express";
 import { getDependencies } from "../config.js";
+import { loadSecrets } from "../secrets.js";
 import { register } from "../core/register.js";
 import { login } from "../core/login.js";
 import { refreshToken } from "../core/refreshToken.js";
@@ -17,6 +18,14 @@ app.use(express.json());
 // bundle is fine here since httpServer.js is warm-process by design
 // (Fargate target). The providers and the repository hold no per-request
 // state.
+// Secrets BEFORE dependencies — config reads them straight from the
+// environment. No-op unless SECRETS_PROVIDER=awssm. Top-level await (ESM).
+const secrets = await loadSecrets();
+if (secrets.provider === "awssm") {
+  // eslint-disable-next-line no-console
+  console.log(`[secrets] loaded from Secrets Manager: ${secrets.loaded.join(", ") || "none"}`);
+}
+
 const deps = getDependencies();
 
 function handle(fn) {

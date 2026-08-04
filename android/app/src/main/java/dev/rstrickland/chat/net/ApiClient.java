@@ -6,6 +6,7 @@ import dev.rstrickland.chat.net.api.AuthApi;
 import dev.rstrickland.chat.net.api.ContactsApi;
 import dev.rstrickland.chat.net.api.MediaApi;
 import dev.rstrickland.chat.net.api.MessagingApi;
+import dev.rstrickland.chat.net.api.NotificationApi;
 import dev.rstrickland.chat.net.api.ProfileApi;
 import dev.rstrickland.chat.net.api.SearchApi;
 import okhttp3.OkHttpClient;
@@ -14,9 +15,11 @@ import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 /**
- * Builds one shared OkHttp client (auth header + logging) and a Retrofit
- * instance per service base URL — because there's no single gateway locally
- * (see ApiConfig). All service APIs are reachable via the accessors here.
+ * Builds one shared OkHttp client (auth header + logging) and ONE Retrofit
+ * instance for all of them — every service is behind a single base URL now (see
+ * ApiConfig), so the per-service Retrofit instances this used to hold are gone.
+ * The interfaces already carry their path prefixes ({@code auth/login},
+ * {@code profiles/me}, …), which is why one base resolves them all unchanged.
  *
  * The config.js / ApiClient analogue: one wiring point, injected not hardcoded.
  */
@@ -29,6 +32,7 @@ public final class ApiClient {
     private final ContactsApi contactsApi;
     private final SearchApi searchApi;
     private final MediaApi mediaApi;
+    private final NotificationApi notificationApi;
 
     private ApiClient(Context ctx) {
         TokenStore tokens = TokenStore.get(ctx);
@@ -41,13 +45,14 @@ public final class ApiClient {
                 .addInterceptor(logging)
                 .build();
 
-        this.authApi = retrofit(http, ApiConfig.AUTH).create(AuthApi.class);
-        Retrofit profileRetrofit = retrofit(http, ApiConfig.PROFILE);
-        this.profileApi = profileRetrofit.create(ProfileApi.class);
-        this.contactsApi = profileRetrofit.create(ContactsApi.class); // contacts live on the Profile service
-        this.messagingApi = retrofit(http, ApiConfig.MESSAGING).create(MessagingApi.class);
-        this.searchApi = retrofit(http, ApiConfig.SEARCH).create(SearchApi.class);
-        this.mediaApi = retrofit(http, ApiConfig.MEDIA).create(MediaApi.class);
+        Retrofit api = retrofit(http, ApiConfig.API_BASE);
+        this.authApi = api.create(AuthApi.class);
+        this.profileApi = api.create(ProfileApi.class);
+        this.contactsApi = api.create(ContactsApi.class); // contacts live on the Profile service
+        this.messagingApi = api.create(MessagingApi.class);
+        this.searchApi = api.create(SearchApi.class);
+        this.mediaApi = api.create(MediaApi.class);
+        this.notificationApi = api.create(NotificationApi.class);
     }
 
     private static Retrofit retrofit(OkHttpClient http, String baseUrl) {
@@ -85,5 +90,9 @@ public final class ApiClient {
 
     public MediaApi media() {
         return mediaApi;
+    }
+
+    public NotificationApi notification() {
+        return notificationApi;
     }
 }

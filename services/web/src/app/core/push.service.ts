@@ -1,7 +1,11 @@
 import { Injectable, effect, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { TokenStore } from './token-store';
+import { SKIP_AUTH_REFRESH } from './auth.interceptor';
+
+/** Stable per-browser id, shared by registration and unregistration. */
+const DEVICE_ID_KEY = 'chat.deviceId';
 
 /**
  * Web Push registration (Phase 5). On login, if the browser supports push and
@@ -30,6 +34,43 @@ export class PushService {
         this.registered = false;
       }
     });
+  }
+
+  /**
+   * Drop this browser's device-token row. Called from AuthService.logout, and
+   * before deleting the account.
+   *
+   * Why it's needed: the server only prunes a token when the push service says
+   * it's DEAD, and this subscription is very much alive at sign-out. Left
+   * registered, it keeps receiving that user's offline pushes — on a shared
+   * browser, after someone else signs in; and after account deletion, for a user
+   * who no longer exists (Messaging doesn't know they're gone, so a peer can
+   * still send to the old conversation and trigger a push here).
+   *
+   * Deliberately fire-and-forget and synchronous to call: sign-out must never
+   * wait on, or be blocked by, the network. Worst case the row lingers until the
+   * subscription dies and gets pruned.
+   *
+   * The bearer is attached explicitly rather than left to the interceptor, so
+   * this can't race the `tokenStore.clear()` that follows it, and the browser's
+   * PushSubscription is intentionally NOT unsubscribed — keeping it means the
+   * next sign-in re-registers without re-prompting for permission.
+   */
+  unregister(): void {
+    const token = this.tokenStore.accessToken;
+    const deviceId = localStorage.getItem(DEVICE_ID_KEY);
+    if (!token || !deviceId) {
+      return; // nothing was ever registered from this browser
+    }
+    this.registered = false;
+    this.http
+      .delete(`/device-tokens/${encodeURIComponent(deviceId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        context: new HttpContext().set(SKIP_AUTH_REFRESH, true),
+      })
+      .subscribe({
+        error: (err) => console.warn('[push] unregister failed:', err?.message),
+      });
   }
 
   private async register(): Promise<void> {
@@ -65,10 +106,10 @@ export class PushService {
 
   /** Stable per-browser id so re-login updates the same token row, not a new one. */
   private deviceId(): string {
-    let id = localStorage.getItem('chat.deviceId');
+    let id = localStorage.getItem(DEVICE_ID_KEY);
     if (!id) {
       id = crypto.randomUUID();
-      localStorage.setItem('chat.deviceId', id);
+      localStorage.setItem(DEVICE_ID_KEY, id);
     }
     return id;
   }
